@@ -5,6 +5,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { healthRouter } from "./routes/health.js";
 import { runnerRouter } from "./routes/runner.js";
 import { runsRouter } from "./routes/runs.js";
+import { seedRouter } from "./routes/seed.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 
 type RequestWithRawBody = express.Request & { rawBody?: Buffer };
@@ -28,6 +29,7 @@ export function createApp(logger: Logger): express.Express {
   app.use(healthRouter);
   app.use(webhooksRouter);
   app.use(runnerRouter);
+  app.use(seedRouter);
   app.use(runsRouter);
   app.use(errorHandler);
   return app;

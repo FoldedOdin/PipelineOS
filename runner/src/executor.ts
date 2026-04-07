@@ -5,6 +5,9 @@
 import type { Logger } from "pino";
 import { PassThrough } from "node:stream";
 import { createDockerClient } from "./docker.js";
+import { parsePipelineYaml } from "./yamlParser.js";
+import { resolveStageOrder } from "./dependencyResolver.js";
+import type { PipelineDefinition, PipelineStage } from "./types.js";
 
 type ClaimedRun = { _id: string } & Record<string, unknown>;
 
@@ -46,6 +49,35 @@ async function claimNextRun(logger: Logger): Promise<ClaimedRun | null> {
   const id = typeof data === "object" && data !== null ? (data as Record<string, unknown>)._id : undefined;
   if (typeof id !== "string" || id === "") return null;
   return { ...(data as Record<string, unknown>), _id: id };
+}
+
+async function fetchPipelineYaml(pipelineId: string, logger: Logger): Promise<string | null> {
+  const res = await apiFetch(`/internal/pipelines/${encodeURIComponent(pipelineId)}`, { method: "GET" });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch pipeline yaml");
+    return null;
+  }
+  const data: unknown = await res.json();
+  const rawYaml = typeof data === "object" && data !== null ? (data as Record<string, unknown>).rawYaml : undefined;
+  return typeof rawYaml === "string" ? rawYaml : null;
+}
+
+function demoPipeline(): PipelineDefinition {
+  return {
+    name: "Demo pipeline",
+    on: ["push"],
+    stages: [
+      {
+        name: "demo",
+        image: "alpine:3.20",
+        run: "echo 'hello from PipelineOS runner'; echo 'stderr line' 1>&2; sleep 1",
+        depends_on: [],
+        env: {},
+        timeout_minutes: null,
+      },
+    ],
+  };
 }
 
 async function upsertStage(runId: string, stageName: string, stage: { image: string; command: string }): Promise<void> {
@@ -124,10 +156,10 @@ async function ensureImage(docker: ReturnType<typeof createDockerClient>, image:
   });
 }
 
-async function runDemoStage(logger: Logger, runId: string): Promise<void> {
-  const stageName = "demo";
-  const image = "alpine:3.20";
-  const command = "sh -lc \"echo 'hello from PipelineOS runner'; echo 'stderr line' 1>&2; sleep 1\"";
+async function runStage(logger: Logger, runId: string, stage: PipelineStage): Promise<void> {
+  const stageName = stage.name;
+  const image = stage.image;
+  const command = `sh -lc ${JSON.stringify(stage.run)}`;
 
   await upsertStage(runId, stageName, { image, command });
   await setStageStatus(runId, stageName, "running");
@@ -145,11 +177,12 @@ async function runDemoStage(logger: Logger, runId: string): Promise<void> {
     void appendLogs(runId, stageName, chunk.toString("utf8"));
   });
 
-  const cmd = ["sh", "-lc", "echo 'hello from PipelineOS runner'; echo 'stderr line' 1>&2; sleep 1"];
+  const cmd = ["sh", "-lc", stage.run];
   const result: unknown = await docker.run(image, cmd, [stdout, stderr], {
     Tty: false,
     AttachStdout: true,
     AttachStderr: true,
+    Env: Object.entries(stage.env).map(([k, v]) => `${k}=${v}`),
   });
 
   const maybeStatusCode =
@@ -165,13 +198,43 @@ async function runDemoStage(logger: Logger, runId: string): Promise<void> {
   }
 }
 
+async function runPipeline(logger: Logger, runId: string, pipeline: PipelineDefinition): Promise<void> {
+  const order = resolveStageOrder(pipeline.stages);
+  const byName = new Map<string, PipelineStage>(pipeline.stages.map((s) => [s.name, s]));
+
+  // Pre-create stage records so logs/status endpoints succeed even if runner crashes mid-flight.
+  for (const stageName of order) {
+    const stage = byName.get(stageName);
+    if (!stage) continue;
+    const command = `sh -lc ${JSON.stringify(stage.run)}`;
+    await upsertStage(runId, stageName, { image: stage.image, command });
+  }
+
+  for (const stageName of order) {
+    const stage = byName.get(stageName);
+    if (!stage) continue;
+    await runStage(logger, runId, stage);
+  }
+}
+
 export async function executeQueuedRun(logger: Logger): Promise<void> {
   const claimed = await claimNextRun(logger);
   if (claimed === null) return;
 
   const runId = claimed._id;
+  const pipelineIdValue = (claimed as Record<string, unknown>).pipelineId;
+  const pipelineId = typeof pipelineIdValue === "string" ? pipelineIdValue : null;
   try {
-    await runDemoStage(logger, runId);
+    let pipeline: PipelineDefinition = demoPipeline();
+    if (pipelineId) {
+      const yaml = await fetchPipelineYaml(pipelineId, logger);
+      if (yaml) {
+        pipeline = parsePipelineYaml(yaml);
+      } else {
+        logger.warn({ pipelineId }, "no pipeline yaml found; using demo pipeline");
+      }
+    }
+    await runPipeline(logger, runId, pipeline);
     await setRunStatus(runId, "success");
   } catch (err) {
     logger.error({ err, runId }, "run execution failed");

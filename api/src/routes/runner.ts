@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
+import { Pipeline } from "../models/Pipeline.js";
 import { runnerService } from "../services/runnerService.js";
 
 export const runnerRouter = Router();
@@ -66,6 +67,20 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
       return;
     }
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
+  try {
+    const pipelineId = req.params.pipelineId;
+    const doc = await Pipeline.findOne({ pipelineId }).lean().exec();
+    if (doc === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(200).json({ rawYaml: doc.rawYaml, updatedAt: doc.updatedAt });
   } catch (err) {
     next(err);
   }
