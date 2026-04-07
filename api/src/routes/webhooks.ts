@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { validateGithubWebhook } from "../middleware/validateWebhook.js";
 import { webhookService } from "../services/webhookService.js";
 
@@ -8,7 +9,14 @@ import { webhookService } from "../services/webhookService.js";
  */
 export const webhooksRouter = Router();
 
-webhooksRouter.post("/api/webhooks/github", validateGithubWebhook, (req, res) => {
+const githubWebhookLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+webhooksRouter.post("/api/webhooks/github", githubWebhookLimiter, validateGithubWebhook, (req, res) => {
   const event = req.header("x-github-event");
   if (event !== "push" && event !== "pull_request") {
     res.status(202).json({ status: "ignored", event: event ?? "unknown" });
