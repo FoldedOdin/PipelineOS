@@ -28,6 +28,8 @@ interface RemediationRule {
     anyHintSubstrings: string[];
   };
   action: { type: "retry_stage"; maxAttempts: number; backoffSeconds: number };
+  auto?: { enabled: boolean };
+  stats?: { attempts: number; saves: number; failures: number; successRate: number };
 }
 
 function requiredEnv(name: string): string {
@@ -135,6 +137,17 @@ async function fetchDiagnosis(runId: string, stageName: string): Promise<Diagnos
   const hints = Array.isArray(o.hints) ? o.hints.filter((v): v is string => typeof v === "string") : [];
   const patterns = Array.isArray(o.patterns) ? o.patterns.filter((v): v is string => typeof v === "string") : [];
   return { summary, hints, patterns };
+}
+
+async function recordRuleOutcome(ruleId: string, outcome: "attempt" | "save" | "failure", logger: Logger): Promise<void> {
+  const res = await apiFetch(`/internal/remediation/rules/${encodeURIComponent(ruleId)}/outcomes`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ outcome }),
+  });
+  if (!res.ok) {
+    logger.warn({ status: res.status, body: await res.text(), ruleId, outcome }, "failed to record rule outcome");
+  }
 }
 
 function demoPipeline(): PipelineDefinition {
@@ -298,6 +311,10 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage, rul
     if (attempt > 1) {
       await appendLogs(runId, stageName, `\n[pipelineos] remediation: retry attempt ${String(attempt)}/${String(maxAttempts)}\n`);
     }
+    if (retryRule && attempt === 2) {
+      // Count a "remediation attempt" only when we actually retry (attempt 2+).
+      await recordRuleOutcome(retryRule.id, "attempt", logger);
+    }
 
     const result: unknown = await docker.run(image, cmd, [stdout, stderr], {
       Tty: false,
@@ -313,6 +330,9 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage, rul
     const statusCode = typeof maybeStatusCode === "number" ? maybeStatusCode : 1;
     if (statusCode === 0) {
       await setStageStatus(runId, stageName, "success", 0);
+      if (retryRule && attempt > 1) {
+        await recordRuleOutcome(retryRule.id, "save", logger);
+      }
       return;
     }
 
@@ -334,6 +354,9 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage, rul
       continue;
     }
 
+    if (retryRule && attempt > 1) {
+      await recordRuleOutcome(retryRule.id, "failure", logger);
+    }
     throw new Error(`stage ${stageName} failed with exit code ${String(statusCode)}`);
   }
 }

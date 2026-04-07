@@ -27,6 +27,18 @@ const remediationRuleSchema = new Schema(
     name: { type: String, required: true },
     match: { type: remediationMatchSchema, required: true },
     action: { type: retryStageActionSchema, required: true },
+    auto: {
+      enabled: { type: Boolean, default: false },
+      minAttempts: { type: Number, default: 10, min: 1, max: 500 },
+      disableBelowSuccessRate: { type: Number, default: 0.2, min: 0, max: 1 },
+    },
+    stats: {
+      attempts: { type: Number, default: 0, min: 0 },
+      saves: { type: Number, default: 0, min: 0 },
+      failures: { type: Number, default: 0, min: 0 },
+      lastAppliedAt: { type: Date, default: null },
+      lastOutcomeAt: { type: Date, default: null },
+    },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } },
 );

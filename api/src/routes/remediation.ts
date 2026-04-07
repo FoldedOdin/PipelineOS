@@ -44,3 +44,22 @@ remediationRouter.delete("/internal/remediation/rules/:id", async (req, res, nex
   }
 });
 
+remediationRouter.post("/internal/remediation/rules/:id/outcomes", async (req, res, next) => {
+  try {
+    const outcomeRaw = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).outcome : undefined;
+    const outcome = outcomeRaw === "attempt" || outcomeRaw === "save" || outcomeRaw === "failure" ? outcomeRaw : null;
+    if (outcome === null) {
+      res.status(400).json({ error: "invalid_outcome" });
+      return;
+    }
+    const updated = await remediationService.recordRuleApplication({ ruleId: req.params.id, outcome });
+    if (updated === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
