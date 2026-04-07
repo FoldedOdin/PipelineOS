@@ -1,3 +1,5 @@
+import type { QueryFilter } from "mongoose";
+import type { RemediationRuleSchemaType } from "../models/RemediationRule.js";
 import { RemediationRule } from "../models/RemediationRule.js";
 
 export interface RemediationRuleView {
@@ -63,7 +65,8 @@ function toView(doc: {
   createdAt?: Date;
   updatedAt?: Date;
 }): RemediationRuleView | null {
-  const id = typeof doc._id === "object" && doc._id !== null && "toString" in doc._id ? String((doc._id as { toString: () => string }).toString()) : null;
+  const id =
+    typeof doc._id === "object" && doc._id !== null && "toString" in doc._id ? (doc._id as { toString: () => string }).toString() : null;
   const name = asNonEmptyString(doc.name);
   if (!id || !name) return null;
   const enabled = doc.enabled === undefined ? true : Boolean(doc.enabled);
@@ -114,7 +117,7 @@ function toView(doc: {
 
 export const remediationService = {
   async listRules(pipelineId: string | null): Promise<RemediationRuleView[]> {
-    const filter: Record<string, unknown> = {};
+    const filter: QueryFilter<RemediationRuleSchemaType> = {};
     if (pipelineId !== null) {
       filter.$or = [{ "match.pipelineId": null }, { "match.pipelineId": pipelineId }];
     }
