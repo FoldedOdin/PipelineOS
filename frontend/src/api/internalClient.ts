@@ -10,20 +10,11 @@ function internalApiKey(): string {
   return key.trim();
 }
 
-async function readErrorBody(response: Response): Promise<string> {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
-}
-
 export async function internalGetJson(path: string): Promise<unknown> {
   const url = `${internalBaseUrl()}${path}`;
   const response = await fetch(url, { headers: { "x-internal-api-key": internalApiKey() } });
   if (!response.ok) {
-    const text = await readErrorBody(response);
-    throw new Error(`request failed: ${String(response.status)} ${response.statusText} ${text}`);
+    throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);
   }
   return (await response.json()) as unknown;
 }
@@ -39,7 +30,7 @@ export async function internalPostJson(path: string, body: unknown): Promise<unk
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const text = await readErrorBody(response);
+    const text = await response.text().catch(() => "");
     throw new Error(`request failed: ${String(response.status)} ${response.statusText} ${text}`);
   }
   return (await response.json()) as unknown;
@@ -49,8 +40,7 @@ export async function internalDelete(path: string): Promise<void> {
   const url = `${internalBaseUrl()}${path}`;
   const response = await fetch(url, { method: "DELETE", headers: { "x-internal-api-key": internalApiKey() } });
   if (!response.ok && response.status !== 204) {
-    const text = await readErrorBody(response);
-    throw new Error(`request failed: ${String(response.status)} ${response.statusText} ${text}`);
+    throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);
   }
 }
 
