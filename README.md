@@ -1,123 +1,246 @@
 # PipelineOS
 
-PipelineOS is a self-hosted CI runner + intelligence layer:
+**Self-hosted CI/CD that understands your pipelines, not just runs them.**
 
-- **Ingest** GitHub webhooks (HMAC-verified) and queue runs
-- **Execute** Docker-backed stages defined in `.pipelineos.yml`
-- **Observe** runs via a React dashboard (runs, live logs, diagnosis, heatmaps, trends)
-- **Improve** reliability with flakiness scoring + remediation rules (rule-driven retries)
-- **Track** estimated per-stage cost (CPU/memory sampling)
+PipelineOS executes Docker-backed stages triggered by GitHub webhooks, then goes further:
+it scores each stage for flakiness, diagnoses failures with AI, and lets you define
+remediation rules that fire automatically. All observable through a live React dashboard.
+No cloud lock-in. No per-seat pricing. Runs entirely on your infrastructure.
 
-## Prerequisites
+> ⚠️ **Status: Early development.** Core runner, webhooks, and dashboard are functional.
+> Flakiness scoring, AI diagnosis, and cost tracking are in active development.
+> Not recommended for production use yet.
 
-- Docker Desktop (or Docker Engine) with Compose v2
-- Node.js 20+ (for local `npm` workflows outside containers)
-- GNU Make (optional). On Windows, you can run Docker Compose directly.
+---
+
+## What it does
+
+| Capability | How |
+|---|---|
+| **Run pipelines** | GitHub push/PR → HMAC-verified webhook → Docker stage execution |
+| **Watch live** | WebSocket log streaming to the dashboard as stages run |
+| **Score flakiness** | Rolling window algorithm per stage — flags unreliable stages automatically |
+| **Diagnose failures** | AI-generated root cause cards (OpenAI or local Ollama) on every failure |
+| **Auto-remediate** | Rules engine: define "if stage X fails with pattern Y, do Z" |
+| **Track cost** | Per-stage CPU/memory sampling with configurable pricing |
+
+---
 
 ## Quick start
 
-1. Copy environment templates:
+**Prerequisites:** Docker Desktop (Compose v2), Node.js 20+
 
-   ```bash
-   cp deploy/.env.example deploy/.env
-   cp .env.example .env
-   ```
+```bash
+# 1. Clone and configure
+git clone https://github.com/yourname/pipeline-os.git
+cd pipeline-os
+cp deploy/.env.example deploy/.env
+cp .env.example .env
+```
 
-   Edit `deploy/.env` and set strong values for:
-   - `GITHUB_WEBHOOK_SECRET` (webhook HMAC secret)
-   - `INTERNAL_API_KEY` (runner → API service-to-service auth)
-   - `JWT_SECRET` (reserved; dashboard auth is not yet shipped)
+Open `deploy/.env` and set these three values — everything else has safe defaults:
 
-2. Start the stack (from the repository root):
+```bash
+GITHUB_WEBHOOK_SECRET=your_webhook_secret   # Must match your GitHub webhook config
+INTERNAL_API_KEY=any_long_random_string     # Runner ↔ API auth
+JWT_SECRET=any_long_random_string           # Reserved for future dashboard auth
+```
 
-   ```bash
-   make dev
-   ```
+```bash
+# 2. Start everything
+make dev
 
-   If you don’t have `make`, run:
+# No make? Use Compose directly:
+docker compose -f deploy/docker-compose.yml up --build
+```
 
-   ```bash
-   docker compose -f deploy/docker-compose.yml up --build
-   ```
+```bash
+# 3. Verify it's running
+curl http://localhost:3001/health
+```
 
-3. Open the dashboard at [http://localhost:3000](http://localhost:3000) and the API health check at [http://localhost:3001/health](http://localhost:3001/health).
+Dashboard → [http://localhost:3000](http://localhost:3000)
 
-## Demo flow (end-to-end)
+---
 
-1. Configure a GitHub webhook on your repo pointing to:
-   - `POST /api/webhooks/github`
-2. Push a commit or open a PR in that repo.
-3. Open the dashboard:
-   - `/runs` for run history
-   - Click a run → stage logs + diagnosis
-   - `/dashboard?pipelineId=owner/repo` for flakiness/heatmap/costs
+## Connect your first repo
 
-## Troubleshooting
+### Step 1 — Add a pipeline definition
 
-- **Webhook returns `401 invalid_signature`**: ensure `GITHUB_WEBHOOK_SECRET` matches GitHub’s webhook secret.
-- **Runner returns `401 invalid_internal_api_key`**: ensure API + runner share the same `INTERNAL_API_KEY`.
-- **Runner can’t access Docker**: ensure Docker socket is mounted and `DOCKER_SOCKET=/var/run/docker.sock` in `deploy/.env`.
-- **No runs created**: verify GitHub is sending `push` or `pull_request` events and the API is reachable from GitHub (use a tunnel if running locally).
+Create `.pipelineos.yml` in your repo root:
+
+```yaml
+name: "My Pipeline"
+on:
+  - push
+  - pull_request
+
+stages:
+  - name: install
+    image: node:20-alpine
+    run: npm ci
+
+  - name: test
+    image: node:20-alpine
+    run: npm test
+    depends_on:
+      - install
+
+  - name: build
+    image: node:20-alpine
+    run: npm run build
+    depends_on:
+      - test
+```
+
+Full schema reference → [`docs/pipeline-schema.md`](docs/pipeline-schema.md)
+
+### Step 2 — Configure a GitHub webhook
+
+In your GitHub repo: **Settings → Webhooks → Add webhook**
+
+| Field | Value |
+|---|---|
+| Payload URL | `https://your-server:3001/api/webhooks/github` |
+| Content type | `application/json` |
+| Secret | Same value as `GITHUB_WEBHOOK_SECRET` in your `.env` |
+| Events | `Push` and `Pull requests` |
+
+Running locally? Expose port 3001 with [ngrok](https://ngrok.com): `ngrok http 3001`
+
+### Step 3 — Push and watch
+
+Push a commit. Open [http://localhost:3000/runs](http://localhost:3000/runs).
+Your pipeline should appear within a few seconds.
+
+---
 
 ## Services
 
-| Service  | Port  | Role                                      |
-|----------|-------|-------------------------------------------|
-| mongo    | 27017 | Primary data store                        |
-| api      | 3001  | REST + WebSocket (live logs)              |
-| runner   | —     | Polls API, executes Docker stages         |
-| frontend | 3000  | Vite + React dashboard                    |
+| Service | Port | Role |
+|---|---|---|
+| `api` | 3001 | REST API + WebSocket log streaming |
+| `runner` | — | Polls API, executes Docker stages |
+| `frontend` | 3000 | React dashboard |
+| `mongo` | 27017 | Primary data store |
 
-## Key endpoints
+---
 
-- **Health**: `GET /health`
-- **Webhook ingress**: `POST /api/webhooks/github` (expects `x-hub-signature-256`)
-- **Runs**:
-  - `GET /api/runs`
-  - `GET /api/runs/:id`
-  - `GET /api/runs/:id/stages/:stageName/logs`
-  - `GET /api/runs/:id/stages/:stageName/diagnosis`
-- **Analytics**:
-  - `GET /api/analytics/flakiness?pipelineId=...`
-  - `GET /api/analytics/flakiness-heatmap?pipelineId=...&days=7`
-  - `GET /api/analytics/failure-trends?days=14`
-  - `GET /api/analytics/stage-costs?pipelineId=...&days=14&limit=10`
+## API reference
 
-## Configuration (high-signal)
+### Public
+GET  /health
+GET  /api/runs
+GET  /api/runs/:id
+GET  /api/runs/:id/stages/:stageName/logs
+GET  /api/runs/:id/stages/:stageName/diagnosis
 
-All config is via environment variables (see `deploy/.env.example`).
+### Analytics
+GET  /api/analytics/flakiness?pipelineId=owner/repo
+GET  /api/analytics/flakiness-heatmap?pipelineId=owner/repo&days=7
+GET  /api/analytics/failure-trends?days=14
+GET  /api/analytics/stage-costs?pipelineId=owner/repo&days=14&limit=10
 
-- **Optional OpenAI diagnosis**
-  - `OPENAI_API_KEY`
-  - `OPENAI_DIAGNOSIS_URL` (optional override)
-  - `OPENAI_DIAGNOSIS_MODEL` (optional override)
-- **Cost estimation inputs (runner)**
-  - `COST_CPU_USD_PER_CPU_SECOND` (default 0)
-  - `COST_MEM_USD_PER_GB_SECOND` (default 0)
+### Webhook ingress
+POST /api/webhooks/github
+Headers: x-hub-signature-256, x-github-event, x-github-delivery
+Returns: 202 { runId } on accepted, 200 { ignored: true } on unsupported events
+
+---
+
+## Configuration
+
+All configuration is via environment variables. See [`deploy/.env.example`](deploy/.env.example)
+for the full list with descriptions.
+
+**Required to start:**
+
+| Variable | Description |
+|---|---|
+| `GITHUB_WEBHOOK_SECRET` | HMAC secret — must match GitHub webhook config |
+| `INTERNAL_API_KEY` | Shared secret between runner and API |
+| `JWT_SECRET` | Secret for future dashboard auth |
+| `MONGODB_URI` | Set automatically in Docker Compose |
+
+**Optional — AI failure diagnosis:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | — | Enables OpenAI-powered diagnosis cards |
+| `OPENAI_DIAGNOSIS_MODEL` | `gpt-4o-mini` | Model override |
+| `OPENAI_DIAGNOSIS_URL` | OpenAI default | Endpoint override (for Azure OpenAI etc.) |
+
+No OpenAI key? PipelineOS still runs — diagnosis cards just won't appear.
+Local model support via Ollama is on the roadmap.
+
+**Optional — cost estimation (runner):**
+
+| Variable | Default | Description |
+|---|---|---|
+| `COST_CPU_USD_PER_CPU_SECOND` | `0` | CPU cost rate |
+| `COST_MEM_USD_PER_GB_SECOND` | `0` | Memory cost rate |
+| `MAX_CONCURRENT_RUNS` | `3` | Max parallel pipeline runs |
+| `MAX_STAGE_LOG_BYTES` | `1048576` | Log size cap per stage (1MB) |
+
+---
 
 ## Makefile targets
 
-| Target         | Description                    |
-|----------------|--------------------------------|
-| `make dev`     | Compose up with rebuild        |
-| `make dev-detached` | Compose up detached       |
-| `make down`    | Compose down                   |
-| `make test`    | API + runner unit tests        |
-| `make lint`    | ESLint in all packages         |
-| `make seed`    | Run `scripts/seed.ts`          |
-| `make build`   | `docker compose build`         |
-| `make logs`    | Follow Compose logs            |
-| `make clean`   | Down with volumes              |
+```bash
+make dev            # Build and start all services
+make dev-detached   # Same, in the background
+make down           # Stop all services
+make test           # Run API + runner unit tests
+make lint           # ESLint across all packages
+make seed           # Seed test data into MongoDB
+make build          # Build Docker images only
+make logs           # Tail Compose logs
+make clean          # Stop and remove volumes
+```
+
+---
+
+## Troubleshooting
+
+**Webhook returns `401 invalid_signature`**
+The `GITHUB_WEBHOOK_SECRET` in your `.env` doesn't match GitHub's webhook secret.
+They must be identical — check for trailing whitespace or newline characters in your env file.
+
+**Runner returns `401 invalid_internal_api_key`**
+The `INTERNAL_API_KEY` in `deploy/.env` must be the same value in both the `api` and `runner`
+service environments. If you edited the env file after starting, restart the stack.
+
+**Runner can't access Docker**
+Confirm the Docker socket is mounted: `DOCKER_SOCKET=/var/run/docker.sock`.
+On Linux, the runner container user may need to be in the `docker` group.
+
+**No runs appearing after a push**
+Check that GitHub can reach your webhook URL — look in GitHub's webhook delivery log
+(Settings → Webhooks → Recent Deliveries). If running locally, confirm your ngrok tunnel
+is active and points to port 3001.
+
+**Runs stuck in `running` state**
+The runner may have crashed mid-execution. Restart the stack — the API will automatically
+requeue any runs that have been `running` for more than 15 minutes.
+
+---
 
 ## Documentation
 
 - [Pipeline YAML schema](docs/pipeline-schema.md)
-- [Architecture](docs/architecture.md)
-- Product/decision docs live under `docs/`
+- [Architecture overview](docs/architecture.md)
+- [GitHub App setup](docs/github-app-setup.md) *(for fetching YAML at specific commit SHAs)*
 
-## Security
+---
 
-Please read [`SECURITY.md`](SECURITY.md) for vulnerability reporting and supported versions.
+## Contributing
+
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before
+opening a PR — it covers branch naming, local dev setup, and the test requirements.
+
+Found a security issue? See [`SECURITY.md`](SECURITY.md) for responsible disclosure.
+
+---
 
 ## License
 
