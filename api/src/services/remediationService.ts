@@ -63,7 +63,8 @@ function toView(doc: {
   createdAt?: Date;
   updatedAt?: Date;
 }): RemediationRuleView | null {
-  const id = typeof doc._id === "object" && doc._id !== null && "toString" in doc._id ? String((doc._id as { toString: () => string }).toString()) : null;
+  const id =
+    typeof doc._id === "object" && doc._id !== null && "toString" in doc._id ? (doc._id as { toString: () => string }).toString() : null;
   const name = asNonEmptyString(doc.name);
   if (!id || !name) return null;
   const enabled = doc.enabled === undefined ? true : Boolean(doc.enabled);
