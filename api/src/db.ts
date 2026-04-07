@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import type { Logger } from "pino";
 import "./models/Pipeline.js";
+import "./models/RemediationRule.js";
 import "./models/Run.js";
 
 /**
