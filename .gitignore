@@ -10,4 +10,4 @@ coverage/
 *.tsbuildinfo
 
 # Local progress diary (must never contain secrets)
-docs/
+docs/PROGRESS_DIARY.md
