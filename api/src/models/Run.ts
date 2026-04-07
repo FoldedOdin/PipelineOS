@@ -15,6 +15,13 @@ const stageResultSchema = new Schema(
     finishedAt: { type: Date, default: null },
     durationMs: { type: Number, default: null },
     logs: { type: String, default: "" },
+    metrics: {
+      cpuSeconds: { type: Number, default: null },
+      cpuPercentAvg: { type: Number, default: null },
+      cpuPercentMax: { type: Number, default: null },
+      memBytesMax: { type: Number, default: null },
+      costUsdEstimated: { type: Number, default: null },
+    },
   },
   { _id: false },
 );

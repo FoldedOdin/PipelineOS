@@ -44,6 +44,13 @@ function looksLikePlaceholder(value: string): boolean {
   return value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here";
 }
 
+function optionalEnvNumber(name: string): number | null {
+  const raw = process.env[name];
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const apiUrl = requiredEnv("API_URL").replace(/\/$/, "");
   const internalKey = requiredEnv("INTERNAL_API_KEY");
@@ -191,6 +198,24 @@ async function appendLogs(runId: string, stageName: string, logs: string): Promi
   });
 }
 
+async function postStageMetrics(
+  runId: string,
+  stageName: string,
+  body: {
+    cpuSeconds: number | null;
+    cpuPercentAvg: number | null;
+    cpuPercentMax: number | null;
+    memBytesMax: number | null;
+    costUsdEstimated: number | null;
+  },
+): Promise<void> {
+  await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/metrics`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 async function setRunStatus(runId: string, status: string): Promise<void> {
   await apiFetch(`/internal/runs/${runId}/status`, {
     method: "POST",
@@ -231,6 +256,158 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function computeCpuPercent(sample: unknown): number | null {
+  if (typeof sample !== "object" || sample === null) return null;
+  const s = sample as Record<string, unknown>;
+  const cpuStats = typeof s.cpu_stats === "object" && s.cpu_stats !== null ? (s.cpu_stats as Record<string, unknown>) : null;
+  const preCpuStats =
+    typeof s.precpu_stats === "object" && s.precpu_stats !== null ? (s.precpu_stats as Record<string, unknown>) : null;
+  if (cpuStats === null || preCpuStats === null) return null;
+
+  const cpuUsage =
+    typeof cpuStats.cpu_usage === "object" && cpuStats.cpu_usage !== null ? (cpuStats.cpu_usage as Record<string, unknown>) : null;
+  const preCpuUsage =
+    typeof preCpuStats.cpu_usage === "object" && preCpuStats.cpu_usage !== null
+      ? (preCpuStats.cpu_usage as Record<string, unknown>)
+      : null;
+  if (cpuUsage === null || preCpuUsage === null) return null;
+
+  const cpuTotal = cpuUsage.total_usage;
+  const prevCpu = preCpuUsage.total_usage;
+  const systemTotal = cpuStats.system_cpu_usage;
+  const prevSystem = preCpuStats.system_cpu_usage;
+  const onlineCpusRaw = cpuStats.online_cpus;
+  const onlineCpus = typeof onlineCpusRaw === "number" && Number.isFinite(onlineCpusRaw) && onlineCpusRaw > 0 ? onlineCpusRaw : 1;
+
+  if (typeof cpuTotal !== "number" || typeof systemTotal !== "number") return null;
+  if (typeof prevCpu !== "number" || typeof prevSystem !== "number") return null;
+  const cpuDelta = cpuTotal - prevCpu;
+  const systemDelta = systemTotal - prevSystem;
+  if (cpuDelta <= 0 || systemDelta <= 0) return null;
+  return (cpuDelta / systemDelta) * onlineCpus * 100;
+}
+
+async function getContainerStatsOnce(container: unknown): Promise<unknown> {
+  // dockerode's Container#stats has overloaded callback/promise signatures; keep typing loose here.
+  return await (container as { stats: (opts: { stream: false }) => Promise<unknown> }).stats({ stream: false });
+}
+
+async function runContainerWithStats(input: {
+  docker: ReturnType<typeof createDockerClient>;
+  image: string;
+  cmd: string[];
+  env: Record<string, string>;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  logger: Logger;
+}): Promise<{
+  statusCode: number;
+  cpuSeconds: number | null;
+  cpuPercentAvg: number | null;
+  cpuPercentMax: number | null;
+  memBytesMax: number | null;
+  memBytesAvg: number | null;
+}> {
+  const container = await input.docker.createContainer({
+    Image: input.image,
+    Cmd: input.cmd,
+    Tty: false,
+    Env: Object.entries(input.env).map(([k, v]) => `${k}=${v}`),
+    AttachStdout: true,
+    AttachStderr: true,
+  });
+
+  const stream = await container.attach({ stream: true, stdout: true, stderr: true });
+  stream.pipe(input.stdout);
+  stream.pipe(input.stderr);
+
+  await container.start();
+
+  let samples = 0;
+  let memBytesMax = 0;
+  let memBytesSum = 0;
+  let cpuPctMax = 0;
+  let cpuPctSum = 0;
+  let firstCpuTotal: number | null = null;
+  let lastCpuTotal: number | null = null;
+
+  const pollEveryMs = 2000;
+  const poll = async (): Promise<void> => {
+    try {
+      const raw = await getContainerStatsOnce(container);
+      if (typeof raw !== "object" || raw === null) return;
+      const s = raw as Record<string, unknown>;
+
+      const memStats = typeof s.memory_stats === "object" && s.memory_stats !== null ? (s.memory_stats as Record<string, unknown>) : {};
+      const usage = memStats.usage;
+      if (typeof usage === "number" && Number.isFinite(usage) && usage > memBytesMax) {
+        memBytesMax = usage;
+      }
+      if (typeof usage === "number" && Number.isFinite(usage) && usage >= 0) {
+        memBytesSum += usage;
+      }
+
+      const cpuPct = computeCpuPercent(raw);
+      if (typeof cpuPct === "number" && Number.isFinite(cpuPct) && cpuPct > cpuPctMax) {
+        cpuPctMax = cpuPct;
+      }
+      if (typeof cpuPct === "number" && Number.isFinite(cpuPct) && cpuPct >= 0) {
+        cpuPctSum += cpuPct;
+      }
+
+      const cpuStats = typeof s.cpu_stats === "object" && s.cpu_stats !== null ? (s.cpu_stats as Record<string, unknown>) : {};
+      const cpuUsage = typeof cpuStats.cpu_usage === "object" && cpuStats.cpu_usage !== null ? (cpuStats.cpu_usage as Record<string, unknown>) : {};
+      const totalUsage = cpuUsage.total_usage;
+      if (typeof totalUsage === "number" && Number.isFinite(totalUsage)) {
+        if (firstCpuTotal === null) firstCpuTotal = totalUsage;
+        lastCpuTotal = totalUsage;
+      }
+
+      samples += 1;
+    } catch (err) {
+      input.logger.debug({ err }, "stats poll failed");
+    }
+  };
+
+  const pollTimer = setInterval(() => {
+    void poll();
+  }, pollEveryMs);
+
+  // Take an initial poll quickly so we capture early memory spikes.
+  await poll();
+  const waitResult: unknown = await container.wait();
+  clearInterval(pollTimer);
+  await poll();
+
+  const statusCodeRaw =
+    typeof waitResult === "object" && waitResult !== null ? (waitResult as Record<string, unknown>).StatusCode : undefined;
+  const code = typeof statusCodeRaw === "number" && Number.isFinite(statusCodeRaw) ? statusCodeRaw : 1;
+
+  // Best-effort cleanup.
+  try {
+    await container.remove({ force: true });
+  } catch (err) {
+    input.logger.debug({ err }, "container cleanup failed");
+  }
+
+  const cpuSeconds =
+    typeof firstCpuTotal === "number" && typeof lastCpuTotal === "number" && lastCpuTotal >= firstCpuTotal
+      ? (lastCpuTotal - firstCpuTotal) / 1e9
+      : null;
+  const cpuPercentAvg = samples > 0 ? cpuPctSum / samples : null;
+  const cpuPercentMax = samples > 0 ? cpuPctMax : null;
+  const memAvg = samples > 0 ? memBytesSum / samples : null;
+
+  return {
+    statusCode: code,
+    cpuSeconds,
+    cpuPercentAvg,
+    cpuPercentMax,
+    memBytesMax: samples > 0 ? memBytesMax : null,
+    memBytesAvg: memAvg,
+  };
 }
 
 async function ensureImage(docker: ReturnType<typeof createDockerClient>, image: string, logger: Logger): Promise<void> {
@@ -316,18 +493,33 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage, rul
       await recordRuleOutcome(retryRule.id, "attempt", logger);
     }
 
-    const result: unknown = await docker.run(image, cmd, [stdout, stderr], {
-      Tty: false,
-      AttachStdout: true,
-      AttachStderr: true,
-      Env: Object.entries(stage.env).map(([k, v]) => `${k}=${v}`),
+    const wallStart = Date.now();
+    const result = await runContainerWithStats({
+      docker,
+      image,
+      cmd,
+      env: stage.env,
+      stdout,
+      stderr,
+      logger,
     });
+    const wallSeconds = Math.max(0, (Date.now() - wallStart) / 1000);
 
-    const maybeStatusCode =
-      Array.isArray(result) && typeof result[0] === "object" && result[0] !== null
-        ? (result[0] as Record<string, unknown>).StatusCode
-        : undefined;
-    const statusCode = typeof maybeStatusCode === "number" ? maybeStatusCode : 1;
+    const cpuPrice = optionalEnvNumber("COST_CPU_USD_PER_CPU_SECOND") ?? 0;
+    const memPrice = optionalEnvNumber("COST_MEM_USD_PER_GB_SECOND") ?? 0;
+    const memGbSeconds = result.memBytesAvg !== null ? (result.memBytesAvg / 1e9) * wallSeconds : null;
+    const costUsdEstimated =
+      result.cpuSeconds !== null && memGbSeconds !== null ? result.cpuSeconds * cpuPrice + memGbSeconds * memPrice : null;
+
+    void postStageMetrics(runId, stageName, {
+      cpuSeconds: result.cpuSeconds,
+      cpuPercentAvg: result.cpuPercentAvg,
+      cpuPercentMax: result.cpuPercentMax,
+      memBytesMax: result.memBytesMax,
+      costUsdEstimated,
+    }).catch(() => undefined);
+
+    const statusCode = result.statusCode;
     if (statusCode === 0) {
       await setStageStatus(runId, stageName, "success", 0);
       if (retryRule && attempt > 1) {

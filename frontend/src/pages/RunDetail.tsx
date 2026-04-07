@@ -16,6 +16,13 @@ interface StageView {
   image: string;
   durationLabel: string;
   logs: string;
+  metrics: {
+    cpuSeconds: number | null;
+    cpuPercentAvg: number | null;
+    cpuPercentMax: number | null;
+    memBytesMax: number | null;
+    costUsdEstimated: number | null;
+  } | null;
 }
 
 interface RunView {
@@ -70,8 +77,19 @@ function parseRun(payload: unknown): RunView | null {
       const image = asString(st.image);
       const logs = typeof st.logs === "string" ? st.logs : "";
       const durationLabel = formatMs(st.durationMs);
+      const metricsRaw = typeof st.metrics === "object" && st.metrics !== null ? (st.metrics as Record<string, unknown>) : null;
+      const metrics =
+        metricsRaw === null
+          ? null
+          : {
+              cpuSeconds: typeof metricsRaw.cpuSeconds === "number" ? metricsRaw.cpuSeconds : null,
+              cpuPercentAvg: typeof metricsRaw.cpuPercentAvg === "number" ? metricsRaw.cpuPercentAvg : null,
+              cpuPercentMax: typeof metricsRaw.cpuPercentMax === "number" ? metricsRaw.cpuPercentMax : null,
+              memBytesMax: typeof metricsRaw.memBytesMax === "number" ? metricsRaw.memBytesMax : null,
+              costUsdEstimated: typeof metricsRaw.costUsdEstimated === "number" ? metricsRaw.costUsdEstimated : null,
+            };
       if (!name || !stageStatus || !image) continue;
-      stages.push({ name, status: stageStatus, image, durationLabel, logs });
+      stages.push({ name, status: stageStatus, image, durationLabel, logs, metrics });
     }
   }
 
@@ -189,6 +207,24 @@ export default function RunDetail(): ReactElement {
                       image={stage.image}
                       durationLabel={stage.durationLabel}
                     >
+                      {stage.metrics !== null ? (
+                        <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                            cpu: {stage.metrics.cpuSeconds !== null ? `${stage.metrics.cpuSeconds.toFixed(2)}s` : "—"}
+                          </span>
+                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                            cpu% avg: {stage.metrics.cpuPercentAvg !== null ? stage.metrics.cpuPercentAvg.toFixed(1) : "—"}
+                          </span>
+                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                            mem max:{" "}
+                            {stage.metrics.memBytesMax !== null ? `${(stage.metrics.memBytesMax / 1024 / 1024).toFixed(1)} MiB` : "—"}
+                          </span>
+                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono text-amber-200">
+                            cost:{" "}
+                            {stage.metrics.costUsdEstimated !== null ? `$${stage.metrics.costUsdEstimated.toFixed(4)}` : "—"}
+                          </span>
+                        </div>
+                      ) : null}
                       <LogViewer text={stage.logs.length > 0 ? stage.logs : "No stored logs yet."} />
                       <DiagnosisCard runId={run.id} stageName={stage.name} status={stage.status} />
                     </StageRow>

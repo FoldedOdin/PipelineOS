@@ -16,6 +16,13 @@ interface StageDoc {
   finishedAt: Date | null;
   durationMs: number | null;
   logs: string;
+  metrics?: {
+    cpuSeconds?: number | null;
+    cpuPercentAvg?: number | null;
+    cpuPercentMax?: number | null;
+    memBytesMax?: number | null;
+    costUsdEstimated?: number | null;
+  };
 }
 
 function requiredString(value: unknown): string | null {
@@ -30,6 +37,13 @@ function readStringField(body: unknown, key: string): string | null {
 function readNumberField(body: unknown, key: string): number | null {
   if (typeof body !== "object" || body === null) return null;
   const value = (body as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readNullableNumberField(body: unknown, key: string): number | null {
+  if (typeof body !== "object" || body === null) return null;
+  const value = (body as Record<string, unknown>)[key];
+  if (value === null) return null;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
@@ -181,6 +195,33 @@ export const runnerService = {
     }
     await run.save();
     publishStageLog(runId, stageName, chunk);
+    return true;
+  },
+
+  async updateStageMetrics(runId: string, stageName: string, body: unknown): Promise<boolean> {
+    if (!isValidObjectId(runId)) return false;
+
+    const cpuSeconds = readNullableNumberField(body, "cpuSeconds");
+    const cpuPercentAvg = readNullableNumberField(body, "cpuPercentAvg");
+    const cpuPercentMax = readNullableNumberField(body, "cpuPercentMax");
+    const memBytesMax = readNullableNumberField(body, "memBytesMax");
+    const costUsdEstimated = readNullableNumberField(body, "costUsdEstimated");
+
+    const run = await Run.findById(runId).exec();
+    if (run === null) return false;
+
+    const stages = run.stages as unknown as StageDoc[];
+    const stage = stages.find((s) => s.name === stageName);
+    if (stage === undefined) return false;
+
+    stage.metrics ??= {};
+    if (cpuSeconds !== null) stage.metrics.cpuSeconds = cpuSeconds;
+    if (cpuPercentAvg !== null) stage.metrics.cpuPercentAvg = cpuPercentAvg;
+    if (cpuPercentMax !== null) stage.metrics.cpuPercentMax = cpuPercentMax;
+    if (memBytesMax !== null) stage.metrics.memBytesMax = memBytesMax;
+    if (costUsdEstimated !== null) stage.metrics.costUsdEstimated = costUsdEstimated;
+
+    await run.save();
     return true;
   },
 } as const;

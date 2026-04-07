@@ -74,6 +74,19 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
   }
 });
 
+runnerRouter.post("/internal/runs/:id/stages/:stageName/metrics", async (req, res, next) => {
+  try {
+    const ok = await runnerService.updateStageMetrics(req.params.id, req.params.stageName, req.body);
+    if (!ok) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 runnerRouter.post("/internal/runs/:id/heartbeat", async (req, res, next) => {
   try {
     const ok = await runnerService.heartbeatRun(req.params.id);

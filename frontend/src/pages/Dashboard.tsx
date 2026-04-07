@@ -18,6 +18,14 @@ interface FailureTrendPoint {
   successRuns: number;
 }
 
+interface StageCostAggregate {
+  stageName: string;
+  runs: number;
+  totalCostUsd: number;
+  avgCostUsd: number;
+  maxCostUsd: number;
+}
+
 function heatmapColor(score: number | null): string {
   if (score === null) return "bg-slate-800/60";
   const s = Math.max(0, Math.min(1, score));
@@ -34,6 +42,7 @@ export default function Dashboard(): ReactElement {
   const [heatmapDays, setHeatmapDays] = useState<string[]>([]);
   const [heatmapStages, setHeatmapStages] = useState<{ stageName: string; cells: (number | null)[] }[]>([]);
   const [trend, setTrend] = useState<FailureTrendPoint[]>([]);
+  const [stageCosts, setStageCosts] = useState<StageCostAggregate[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const load = useCallback(async (): Promise<void> => {
@@ -42,15 +51,17 @@ export default function Dashboard(): ReactElement {
       setHeatmapDays([]);
       setHeatmapStages([]);
       setTrend([]);
+      setStageCosts(undefined);
       return;
     }
     setError(undefined);
     try {
       const encoded = encodeURIComponent(pipelineId);
-      const [flakinessRaw, heatRaw, trendRaw] = await Promise.all([
+      const [flakinessRaw, heatRaw, trendRaw, costRaw] = await Promise.all([
         apiGetJson(`/api/analytics/flakiness?pipelineId=${encoded}`),
         apiGetJson(`/api/analytics/flakiness-heatmap?pipelineId=${encoded}&days=7`),
         apiGetJson(`/api/analytics/failure-trends?days=14`),
+        apiGetJson(`/api/analytics/stage-costs?pipelineId=${encoded}&days=14&limit=10`),
       ]);
 
       const scores: FlakinessScore[] = [];
@@ -117,6 +128,27 @@ export default function Dashboard(): ReactElement {
         }
         setTrend(points);
       }
+
+      const costs: StageCostAggregate[] = [];
+      if (typeof costRaw === "object" && costRaw !== null) {
+        const arr = (costRaw as Record<string, unknown>).topStages;
+        if (Array.isArray(arr)) {
+          for (const row of arr) {
+            if (typeof row !== "object" || row === null) continue;
+            const r = row as Record<string, unknown>;
+            const stageName = typeof r.stageName === "string" ? r.stageName : null;
+            if (!stageName) continue;
+            costs.push({
+              stageName,
+              runs: typeof r.runs === "number" ? r.runs : 0,
+              totalCostUsd: typeof r.totalCostUsd === "number" ? r.totalCostUsd : 0,
+              avgCostUsd: typeof r.avgCostUsd === "number" ? r.avgCostUsd : 0,
+              maxCostUsd: typeof r.maxCostUsd === "number" ? r.maxCostUsd : 0,
+            });
+          }
+        }
+      }
+      setStageCosts(costs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "unknown error");
     }
@@ -297,6 +329,45 @@ export default function Dashboard(): ReactElement {
           </div>
         )}
       </section>
+
+      {pipelineId !== "" ? (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-200">Top stage cost (last 14 days)</h3>
+          {stageCosts === undefined ? (
+            <p className="text-sm text-slate-500">Loading…</p>
+          ) : stageCosts.length === 0 ? (
+            <p className="text-sm text-slate-500">No cost metrics recorded yet. Run pipelines to populate stage costs.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-800">
+              <table className="min-w-full text-left text-sm text-slate-200">
+                <thead className="bg-slate-900/80 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Stage</th>
+                    <th className="px-3 py-2">Runs</th>
+                    <th className="px-3 py-2">Total</th>
+                    <th className="px-3 py-2">Avg</th>
+                    <th className="px-3 py-2">Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stageCosts.map((row) => (
+                    <tr key={row.stageName} className="border-t border-slate-800">
+                      <td className="px-3 py-2 font-mono text-white">{row.stageName}</td>
+                      <td className="px-3 py-2 font-mono text-slate-400">{String(row.runs)}</td>
+                      <td className="px-3 py-2 font-mono text-amber-200">${row.totalCostUsd.toFixed(4)}</td>
+                      <td className="px-3 py-2 font-mono text-slate-300">${row.avgCostUsd.toFixed(4)}</td>
+                      <td className="px-3 py-2 font-mono text-slate-300">${row.maxCostUsd.toFixed(4)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-slate-500">
+            Estimated cost uses runner env pricing (`COST_CPU_USD_PER_CPU_SECOND`, `COST_MEM_USD_PER_GB_SECOND`). Defaults to 0 until configured.
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }
