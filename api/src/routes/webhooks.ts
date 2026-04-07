@@ -8,9 +8,19 @@ import { webhookService } from "../services/webhookService.js";
  */
 export const webhooksRouter = Router();
 
-void webhookService;
-void validateGithubWebhook;
+webhooksRouter.post("/api/webhooks/github", validateGithubWebhook, (req, res) => {
+  const event = req.header("x-github-event");
+  if (event !== "push" && event !== "pull_request") {
+    res.status(202).json({ status: "ignored", event: event ?? "unknown" });
+    return;
+  }
 
-webhooksRouter.post("/api/webhooks/github", (_req, res) => {
-  res.status(501).json({ error: "not_implemented" });
+  webhookService.enqueueGithubEvent({
+    event,
+    body: req.body,
+    logger: req.log,
+  });
+
+  // Return quickly to stay within GitHub webhook time limits.
+  res.status(202).json({ status: "accepted" });
 });
