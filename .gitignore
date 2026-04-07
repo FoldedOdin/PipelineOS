@@ -8,3 +8,6 @@ deploy/.env
 coverage/
 .vite/
 *.tsbuildinfo
+
+# Local progress diary (must never contain secrets)
+docs/PROGRESS_DIARY.md
