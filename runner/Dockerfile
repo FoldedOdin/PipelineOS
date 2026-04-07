@@ -1,9 +1,9 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
-COPY runner/package.json ./
-RUN npm install
+COPY runner/package.json runner/package-lock.json ./
+RUN npm ci
 
 COPY runner/ ./
 
