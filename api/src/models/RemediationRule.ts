@@ -2,6 +2,36 @@ import mongoose, { Schema } from "mongoose";
 
 export type RemediationActionType = "retry_stage";
 
+export interface RemediationRuleSchemaType {
+  enabled: boolean;
+  name: string;
+  match: {
+    pipelineId: string | null;
+    stageName: string | null;
+    anyPatterns: string[];
+    anyHintSubstrings: string[];
+  };
+  action: {
+    type: "retry_stage";
+    maxAttempts: number;
+    backoffSeconds: number;
+  };
+  auto: {
+    enabled: boolean;
+    minAttempts: number;
+    disableBelowSuccessRate: number;
+  };
+  stats: {
+    attempts: number;
+    saves: number;
+    failures: number;
+    lastAppliedAt: Date | null;
+    lastOutcomeAt: Date | null;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 const retryStageActionSchema = new Schema(
   {
     type: { type: String, required: true, enum: ["retry_stage"] },
@@ -45,6 +75,7 @@ const remediationRuleSchema = new Schema(
 
 remediationRuleSchema.index({ "match.pipelineId": 1, enabled: 1 });
 
-export type RemediationRuleDocument = mongoose.HydratedDocument<mongoose.InferSchemaType<typeof remediationRuleSchema>>;
-export const RemediationRule = mongoose.model("RemediationRule", remediationRuleSchema);
+export type RemediationRuleDocument = mongoose.HydratedDocument<RemediationRuleSchemaType>;
+
+export const RemediationRule = mongoose.model<RemediationRuleSchemaType>("RemediationRule", remediationRuleSchema);
 
