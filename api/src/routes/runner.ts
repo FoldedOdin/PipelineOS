@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
 import { Pipeline } from "../models/Pipeline.js";
+import { fetchPipelineYamlFromGithub, isGithubAppConfigured } from "../services/githubPipelineService.js";
 import { runnerService } from "../services/runnerService.js";
 
 export const runnerRouter = Router();
@@ -75,12 +76,31 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
 runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
   try {
     const pipelineId = req.params.pipelineId;
-    const doc = await Pipeline.findOne({ pipelineId }).lean().exec();
-    if (doc === null) {
-      res.status(404).json({ error: "not_found" });
+    const ref = typeof req.query.ref === "string" && req.query.ref !== "" ? req.query.ref : null;
+    if (ref === null) {
+      res.status(400).json({ error: "missing_ref" });
       return;
     }
-    res.status(200).json({ rawYaml: doc.rawYaml, updatedAt: doc.updatedAt });
+
+    const cached = await Pipeline.findOne({ pipelineId }).lean().exec();
+    if (cached !== null && cached.refSha === ref) {
+      res.status(200).json({ rawYaml: cached.rawYaml, updatedAt: cached.updatedAt, refSha: cached.refSha, source: "cache" });
+      return;
+    }
+
+    if (!isGithubAppConfigured()) {
+      res.status(501).json({ error: "github_app_not_configured" });
+      return;
+    }
+
+    const rawYaml = await fetchPipelineYamlFromGithub({ pipelineId, refSha: ref, logger: req.log });
+    await Pipeline.findOneAndUpdate(
+      { pipelineId },
+      { $set: { pipelineId, refSha: ref, rawYaml, updatedAt: new Date() } },
+      { upsert: true },
+    ).exec();
+
+    res.status(200).json({ rawYaml, updatedAt: new Date().toISOString(), refSha: ref, source: "github" });
   } catch (err) {
     next(err);
   }

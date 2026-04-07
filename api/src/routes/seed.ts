@@ -16,7 +16,7 @@ seedRouter.post("/internal/seed/pipelines", requireInternalApiKey, async (req, r
 
     await Pipeline.findOneAndUpdate(
       { pipelineId },
-      { $set: { pipelineId, rawYaml, updatedAt: new Date() } },
+      { $set: { pipelineId, refSha: "seed", rawYaml, updatedAt: new Date() } },
       { upsert: true },
     ).exec();
 

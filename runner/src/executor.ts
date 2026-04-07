@@ -51,8 +51,10 @@ async function claimNextRun(logger: Logger): Promise<ClaimedRun | null> {
   return { ...(data as Record<string, unknown>), _id: id };
 }
 
-async function fetchPipelineYaml(pipelineId: string, logger: Logger): Promise<string | null> {
-  const res = await apiFetch(`/internal/pipelines/${encodeURIComponent(pipelineId)}`, { method: "GET" });
+async function fetchPipelineYaml(pipelineId: string, refSha: string, logger: Logger): Promise<string | null> {
+  const res = await apiFetch(`/internal/pipelines/${encodeURIComponent(pipelineId)}?ref=${encodeURIComponent(refSha)}`, {
+    method: "GET",
+  });
   if (res.status === 404) return null;
   if (!res.ok) {
     logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch pipeline yaml");
@@ -224,14 +226,16 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   const runId = claimed._id;
   const pipelineIdValue = (claimed as Record<string, unknown>).pipelineId;
   const pipelineId = typeof pipelineIdValue === "string" ? pipelineIdValue : null;
+  const commitShaValue = (claimed as Record<string, unknown>).commitSha;
+  const commitSha = typeof commitShaValue === "string" ? commitShaValue : null;
   try {
     let pipeline: PipelineDefinition = demoPipeline();
-    if (pipelineId) {
-      const yaml = await fetchPipelineYaml(pipelineId, logger);
+    if (pipelineId && commitSha) {
+      const yaml = await fetchPipelineYaml(pipelineId, commitSha, logger);
       if (yaml) {
         pipeline = parsePipelineYaml(yaml);
       } else {
-        logger.warn({ pipelineId }, "no pipeline yaml found; using demo pipeline");
+        logger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
       }
     }
     await runPipeline(logger, runId, pipeline);
