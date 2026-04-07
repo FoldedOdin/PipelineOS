@@ -42,9 +42,9 @@ function asStageStatus(value: unknown): StageStatus | null {
 function formatMs(ms: unknown): string {
   if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
   const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return `${String(seconds)}s`;
   const minutes = Math.round(seconds / 60);
-  return `${minutes}m`;
+  return `${String(minutes)}m`;
 }
 
 function parseRun(payload: unknown): RunView | null {

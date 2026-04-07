@@ -30,7 +30,7 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
       run.status = "failed";
       run.finishedAt = new Date();
 
-      const stages = run.stages as unknown as Array<{ status?: string; finishedAt?: Date | null }>;
+      const stages = run.stages as unknown as { status?: string; finishedAt?: Date | null }[];
       for (const stage of stages) {
         if (stage.status === "running" || stage.status === "pending") {
           stage.status = "failed";
@@ -52,7 +52,9 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
   logger.info({ checkEveryMs, staleAfterMs }, "stale run recovery enabled");
 
   return {
-    stop: () => clearInterval(interval),
+    stop: () => {
+      clearInterval(interval);
+    },
   };
 }
 

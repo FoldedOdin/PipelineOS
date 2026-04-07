@@ -62,8 +62,12 @@ function main(): void {
       });
   };
 
-  process.on("SIGTERM", () => beginShutdown("SIGTERM"));
-  process.on("SIGINT", () => beginShutdown("SIGINT"));
+  process.on("SIGTERM", () => {
+    beginShutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    beginShutdown("SIGINT");
+  });
 }
 
 main();

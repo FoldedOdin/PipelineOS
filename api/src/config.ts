@@ -42,7 +42,7 @@ export function validateApiConfig(logger: Logger): void {
   const appId = optionalEnv("GITHUB_APP_ID");
   const privateKey = optionalEnv("GITHUB_APP_PRIVATE_KEY");
   const installationId = optionalEnv("GITHUB_APP_INSTALLATION_ID");
-  const anyGithubApp = Boolean(appId || privateKey || installationId);
+  const anyGithubApp = appId !== null || privateKey !== null || installationId !== null;
   if (anyGithubApp && (!appId || !privateKey || !installationId)) {
     throw new Error("GitHub App config incomplete: set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID");
   }

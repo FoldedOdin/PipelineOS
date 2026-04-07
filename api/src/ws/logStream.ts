@@ -42,7 +42,7 @@ function parseRunIdFromRequest(req: IncomingMessage): string | null {
   // Expected: /ws/runs/:runId
   const match = /^\/ws\/runs\/([^/?#]+)$/.exec(rawUrl.split("?")[0] ?? "");
   if (!match) return null;
-  const runId = decodeURIComponent(match[1] ?? "");
+  const runId = decodeURIComponent(match[1]);
   return runId !== "" ? runId : null;
 }
 

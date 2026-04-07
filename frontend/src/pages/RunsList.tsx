@@ -31,9 +31,9 @@ function formatDurationMs(startedAt: string | null, finishedAt: string | null): 
   const end = Date.parse(finishedAt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
   const seconds = Math.round((end - start) / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return `${String(seconds)}s`;
   const minutes = Math.round(seconds / 60);
-  return `${minutes}m`;
+  return `${String(minutes)}m`;
 }
 
 function parseRunsList(payload: unknown): { items: RunRow[]; total: number } | null {
