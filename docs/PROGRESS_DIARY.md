@@ -145,7 +145,7 @@ This project should bias toward **shipping a visible, usable MVP**, then fixing 
 
 ### 2026-04-07 — v0.1.0 release
 
-- Tagged **`v0.1.0`** and published a **GitHub Release** with notes aligned to `CHANGELOG.md` (`[0.1.0] - 2026-04-07`).
+- Tagged **`v0.1.0`** and published a **GitHub Release** with notes aligned to `CHANGELOG.md` (`[0.1.0] - 2026-04-07`): [github.com/FoldedOdin/PipelineOS/releases/tag/v0.1.0](https://github.com/FoldedOdin/PipelineOS/releases/tag/v0.1.0).
 - Pre-release verification: CI green on `master`; local gates passed (`api` / `runner` / `frontend`: `npm ci`, lint, tests/build).
 - **`docs/RELEASE_CHECKLIST_v0.1.0.md`** is now **gitignored** (personal/local checklist only; do not commit secrets or one-off release notes there).
 
