@@ -46,7 +46,7 @@ function parseRules(payload: unknown): Rule[] {
     const actionRaw = typeof o.action === "object" && o.action !== null ? (o.action as Record<string, unknown>) : null;
     const autoRaw = typeof o.auto === "object" && o.auto !== null ? (o.auto as Record<string, unknown>) : {};
     const statsRaw = typeof o.stats === "object" && o.stats !== null ? (o.stats as Record<string, unknown>) : {};
-    if (actionRaw === null || actionRaw.type !== "retry_stage") continue;
+    if (actionRaw?.type !== "retry_stage") continue;
     const maxAttempts = asNumber(actionRaw.maxAttempts) ?? 1;
     const backoffSeconds = asNumber(actionRaw.backoffSeconds) ?? 0;
     out.push({
