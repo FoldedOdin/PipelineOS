@@ -31,7 +31,7 @@ export const runService = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean<Record<string, unknown>>()
+        .lean<Record<string, unknown>[]>()
         .exec(),
     ]);
 

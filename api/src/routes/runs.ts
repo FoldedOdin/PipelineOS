@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { diagnosisService } from "../services/diagnosisService.js";
 import { runService } from "../services/runService.js";
 
 /**
@@ -38,6 +39,19 @@ runsRouter.get("/api/runs/:id/stages/:stageName/logs", async (req, res, next) =>
       return;
     }
     res.status(200).json({ logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+runsRouter.get("/api/runs/:id/stages/:stageName/diagnosis", async (req, res, next) => {
+  try {
+    const result = await diagnosisService.diagnoseStage(req.params.id, req.params.stageName);
+    if (result === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

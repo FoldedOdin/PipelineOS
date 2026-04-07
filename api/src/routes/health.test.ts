@@ -1,5 +1,5 @@
 import request from "supertest";
-import pino from "pino";
+import { pino } from "pino";
 import type { Logger } from "pino";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
@@ -16,7 +16,6 @@ function isHealthPayload(value: unknown): value is { status: string; timestamp: 
 }
 
 function createSilentLogger(): Logger {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- pino default export factory
   return pino({ level: "silent" });
 }
 

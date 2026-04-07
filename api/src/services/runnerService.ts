@@ -1,5 +1,6 @@
 import { isValidObjectId } from "mongoose";
 import { Run } from "../models/Run.js";
+import { flakinessService } from "../services/flakinessService.js";
 import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
@@ -142,6 +143,19 @@ export const runnerService = {
 
     await run.save();
     publishStageStatus(runId, stageName, status);
+
+    if (status === "success" || status === "failed") {
+      const pipelineId = typeof run.pipelineId === "string" ? run.pipelineId : String(run.pipelineId);
+      void flakinessService
+        .recordOutcome({
+          pipelineId,
+          stageName,
+          runId: run._id,
+          success: status === "success",
+        })
+        .catch(() => undefined);
+    }
+
     return true;
   },
 

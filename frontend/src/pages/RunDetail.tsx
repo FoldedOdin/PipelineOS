@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import DiagnosisCard from "../components/DiagnosisCard";
 import LogViewer from "../components/LogViewer";
 import StageRow from "../components/StageRow";
 import { apiGetJson } from "../api/client";
@@ -189,6 +190,7 @@ export default function RunDetail(): ReactElement {
                       durationLabel={stage.durationLabel}
                     >
                       <LogViewer text={stage.logs.length > 0 ? stage.logs : "No stored logs yet."} />
+                      <DiagnosisCard runId={run.id} stageName={stage.name} status={stage.status} />
                     </StageRow>
                   ))
                 )}
