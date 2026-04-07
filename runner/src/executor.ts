@@ -11,6 +11,25 @@ import type { PipelineDefinition, PipelineStage } from "./types.js";
 
 type ClaimedRun = { _id: string } & Record<string, unknown>;
 
+interface DiagnosisPayload {
+  summary: string;
+  hints: string[];
+  patterns: string[];
+}
+
+interface RemediationRule {
+  id: string;
+  enabled: boolean;
+  name: string;
+  match: {
+    pipelineId: string | null;
+    stageName: string | null;
+    anyPatterns: string[];
+    anyHintSubstrings: string[];
+  };
+  action: { type: "retry_stage"; maxAttempts: number; backoffSeconds: number };
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === "") {
@@ -63,6 +82,59 @@ async function fetchPipelineYaml(pipelineId: string, refSha: string, logger: Log
   const data: unknown = await res.json();
   const rawYaml = typeof data === "object" && data !== null ? (data as Record<string, unknown>).rawYaml : undefined;
   return typeof rawYaml === "string" ? rawYaml : null;
+}
+
+async function fetchRemediationRules(pipelineId: string, logger: Logger): Promise<RemediationRule[]> {
+  const res = await apiFetch(`/internal/remediation/rules?pipelineId=${encodeURIComponent(pipelineId)}`, { method: "GET" });
+  if (!res.ok) {
+    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch remediation rules");
+    return [];
+  }
+  const json: unknown = await res.json();
+  if (typeof json !== "object" || json === null) return [];
+  const rulesRaw = (json as Record<string, unknown>).rules;
+  if (!Array.isArray(rulesRaw)) return [];
+  const rules: RemediationRule[] = [];
+  for (const r of rulesRaw) {
+    if (typeof r !== "object" || r === null) continue;
+    const o = r as Record<string, unknown>;
+    const id = typeof o.id === "string" ? o.id : null;
+    const enabled = o.enabled !== false;
+    const name = typeof o.name === "string" ? o.name : "rule";
+    const match = typeof o.match === "object" && o.match !== null ? (o.match as Record<string, unknown>) : {};
+    const action = typeof o.action === "object" && o.action !== null ? (o.action as Record<string, unknown>) : null;
+    if (!id || action === null) continue;
+    if (action.type !== "retry_stage") continue;
+    const maxAttempts = typeof action.maxAttempts === "number" ? action.maxAttempts : 2;
+    const backoffSeconds = typeof action.backoffSeconds === "number" ? action.backoffSeconds : 0;
+    rules.push({
+      id,
+      enabled,
+      name,
+      match: {
+        pipelineId: typeof match.pipelineId === "string" ? match.pipelineId : null,
+        stageName: typeof match.stageName === "string" ? match.stageName : null,
+        anyPatterns: Array.isArray(match.anyPatterns) ? match.anyPatterns.filter((v): v is string => typeof v === "string") : [],
+        anyHintSubstrings: Array.isArray(match.anyHintSubstrings)
+          ? match.anyHintSubstrings.filter((v): v is string => typeof v === "string")
+          : [],
+      },
+      action: { type: "retry_stage", maxAttempts, backoffSeconds },
+    });
+  }
+  return rules;
+}
+
+async function fetchDiagnosis(runId: string, stageName: string): Promise<DiagnosisPayload | null> {
+  const res = await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/diagnosis`, { method: "GET" });
+  if (!res.ok) return null;
+  const json: unknown = await res.json();
+  if (typeof json !== "object" || json === null) return null;
+  const o = json as Record<string, unknown>;
+  const summary = typeof o.summary === "string" ? o.summary : "";
+  const hints = Array.isArray(o.hints) ? o.hints.filter((v): v is string => typeof v === "string") : [];
+  const patterns = Array.isArray(o.patterns) ? o.patterns.filter((v): v is string => typeof v === "string") : [];
+  return { summary, hints, patterns };
 }
 
 function demoPipeline(): PipelineDefinition {
@@ -122,6 +194,32 @@ async function heartbeatRun(runId: string): Promise<void> {
   });
 }
 
+function ruleMatches(rule: RemediationRule, ctx: { pipelineId: string; stageName: string; diagnosis: DiagnosisPayload | null }): boolean {
+  if (!rule.enabled) return false;
+  if (rule.match.pipelineId && rule.match.pipelineId !== ctx.pipelineId) return false;
+  if (rule.match.stageName && rule.match.stageName !== ctx.stageName) return false;
+
+  if (rule.match.anyPatterns.length > 0) {
+    const patterns = new Set(ctx.diagnosis?.patterns ?? []);
+    const ok = rule.match.anyPatterns.some((p) => patterns.has(p));
+    if (!ok) return false;
+  }
+
+  if (rule.match.anyHintSubstrings.length > 0) {
+    const hints = (ctx.diagnosis?.hints ?? []).join("\n");
+    const ok = rule.match.anyHintSubstrings.some((s) => hints.includes(s));
+    if (!ok) return false;
+  }
+
+  return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function ensureImage(docker: ReturnType<typeof createDockerClient>, image: string, logger: Logger): Promise<void> {
   try {
     await docker.getImage(image).inspect();
@@ -166,13 +264,12 @@ async function ensureImage(docker: ReturnType<typeof createDockerClient>, image:
   });
 }
 
-async function runStage(logger: Logger, runId: string, stage: PipelineStage): Promise<void> {
+async function runStage(logger: Logger, runId: string, stage: PipelineStage, rules: RemediationRule[], pipelineId: string | null): Promise<void> {
   const stageName = stage.name;
   const image = stage.image;
   const command = `sh -lc ${JSON.stringify(stage.run)}`;
 
   await upsertStage(runId, stageName, { image, command });
-  await setStageStatus(runId, stageName, "running");
 
   const docker = createDockerClient();
   await ensureImage(docker, image, logger);
@@ -188,27 +285,66 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage): Pr
   });
 
   const cmd = ["sh", "-lc", stage.run];
-  const result: unknown = await docker.run(image, cmd, [stdout, stderr], {
-    Tty: false,
-    AttachStdout: true,
-    AttachStderr: true,
-    Env: Object.entries(stage.env).map(([k, v]) => `${k}=${v}`),
-  });
 
-  const maybeStatusCode =
-    Array.isArray(result) && typeof result[0] === "object" && result[0] !== null
-      ? (result[0] as Record<string, unknown>).StatusCode
-      : undefined;
-  const statusCode = typeof maybeStatusCode === "number" ? maybeStatusCode : 1;
-  if (statusCode === 0) {
-    await setStageStatus(runId, stageName, "success", 0);
-  } else {
+  const applicable = pipelineId
+    ? rules.filter((r) => ruleMatches(r, { pipelineId, stageName, diagnosis: null }))
+    : rules.filter((r) => r.enabled && (r.match.stageName === null || r.match.stageName === stageName));
+  const retryRule = applicable.length > 0 ? applicable[0] : null;
+  const maxAttempts = retryRule ? Math.min(5, Math.max(1, Math.floor(retryRule.action.maxAttempts))) : 1;
+  const backoffSeconds = retryRule ? Math.min(120, Math.max(0, Math.floor(retryRule.action.backoffSeconds))) : 0;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await setStageStatus(runId, stageName, "running");
+    if (attempt > 1) {
+      await appendLogs(runId, stageName, `\n[pipelineos] remediation: retry attempt ${String(attempt)}/${String(maxAttempts)}\n`);
+    }
+
+    const result: unknown = await docker.run(image, cmd, [stdout, stderr], {
+      Tty: false,
+      AttachStdout: true,
+      AttachStderr: true,
+      Env: Object.entries(stage.env).map(([k, v]) => `${k}=${v}`),
+    });
+
+    const maybeStatusCode =
+      Array.isArray(result) && typeof result[0] === "object" && result[0] !== null
+        ? (result[0] as Record<string, unknown>).StatusCode
+        : undefined;
+    const statusCode = typeof maybeStatusCode === "number" ? maybeStatusCode : 1;
+    if (statusCode === 0) {
+      await setStageStatus(runId, stageName, "success", 0);
+      return;
+    }
+
     await setStageStatus(runId, stageName, "failed", statusCode);
+
+    const diagnosis = await fetchDiagnosis(runId, stageName);
+    if (pipelineId && retryRule && !ruleMatches(retryRule, { pipelineId, stageName, diagnosis })) {
+      throw new Error(`stage ${stageName} failed with exit code ${String(statusCode)}`);
+    }
+
+    if (attempt < maxAttempts) {
+      if (diagnosis?.summary) {
+        await appendLogs(runId, stageName, `[pipelineos] diagnosis: ${diagnosis.summary}\n`);
+      }
+      if (backoffSeconds > 0) {
+        await appendLogs(runId, stageName, `[pipelineos] backoff: waiting ${String(backoffSeconds)}s before retry\n`);
+        await sleep(backoffSeconds * 1000);
+      }
+      continue;
+    }
+
     throw new Error(`stage ${stageName} failed with exit code ${String(statusCode)}`);
   }
 }
 
-async function runPipeline(logger: Logger, runId: string, pipeline: PipelineDefinition): Promise<void> {
+async function runPipeline(
+  logger: Logger,
+  runId: string,
+  pipeline: PipelineDefinition,
+  rules: RemediationRule[],
+  pipelineId: string | null,
+): Promise<void> {
   const order = resolveStageOrder(pipeline.stages);
   const byName = new Map<string, PipelineStage>(pipeline.stages.map((s) => [s.name, s]));
 
@@ -223,7 +359,7 @@ async function runPipeline(logger: Logger, runId: string, pipeline: PipelineDefi
   for (const stageName of order) {
     const stage = byName.get(stageName);
     if (!stage) continue;
-    await runStage(logger, runId, stage);
+    await runStage(logger, runId, stage, rules, pipelineId);
   }
 }
 
@@ -252,7 +388,8 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
         logger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
       }
     }
-    await runPipeline(logger, runId, pipeline);
+    const rules = pipelineId ? await fetchRemediationRules(pipelineId, logger) : [];
+    await runPipeline(logger, runId, pipeline, rules, pipelineId);
     await setRunStatus(runId, "success");
   } catch (err) {
     logger.error({ err, runId }, "run execution failed");

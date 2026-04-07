@@ -3,6 +3,7 @@ import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
 import { Pipeline } from "../models/Pipeline.js";
 import { fetchPipelineYamlFromGithub, isGithubAppConfigured } from "../services/githubPipelineService.js";
 import { runnerService } from "../services/runnerService.js";
+import { diagnosisService } from "../services/diagnosisService.js";
 
 export const runnerRouter = Router();
 
@@ -81,6 +82,19 @@ runnerRouter.post("/internal/runs/:id/heartbeat", async (req, res, next) => {
       return;
     }
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+runnerRouter.get("/internal/runs/:id/stages/:stageName/diagnosis", async (req, res, next) => {
+  try {
+    const result = await diagnosisService.diagnoseStage(req.params.id, req.params.stageName);
+    if (result === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

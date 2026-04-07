@@ -1,11 +1,10 @@
 import "dotenv/config";
-import pino from "pino";
+import { pino } from "pino";
 import type { Logger } from "pino";
 import { executeQueuedRun } from "./executor.js";
 import { validateRunnerConfig } from "./config.js";
 
 function createRunnerLogger(): Logger {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- pino default export factory
   return pino({
     level: process.env.NODE_ENV === "production" ? "info" : "debug",
   });

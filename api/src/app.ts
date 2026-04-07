@@ -4,6 +4,7 @@ import { pinoHttp } from "pino-http";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { healthRouter } from "./routes/health.js";
+import { remediationRouter } from "./routes/remediation.js";
 import { runnerRouter } from "./routes/runner.js";
 import { runsRouter } from "./routes/runs.js";
 import { seedRouter } from "./routes/seed.js";
@@ -32,6 +33,7 @@ export function createApp(logger: Logger): express.Express {
   app.use(runnerRouter);
   app.use(seedRouter);
   app.use(analyticsRouter);
+  app.use(remediationRouter);
   app.use(runsRouter);
   app.use(errorHandler);
   return app;
