@@ -4,6 +4,7 @@
  */
 import type { Logger } from "pino";
 import { Run } from "../models/Run.js";
+import { WebhookDelivery } from "../models/WebhookDelivery.js";
 import { getWebhookQueue } from "./queueService.js";
 
 type GithubEventName = "push" | "pull_request";
@@ -35,11 +36,11 @@ function getNestedString(body: unknown, path: string[]): string | null {
 }
 
 export const webhookService = {
-  enqueueGithubEvent(input: { event: GithubEventName; body: GithubWebhookBody; logger: Logger }): void {
+  enqueueGithubEvent(input: { event: GithubEventName; deliveryId: string | undefined; body: GithubWebhookBody; logger: Logger }): void {
     const queue = getWebhookQueue();
     queue
       .add(async () => {
-        const { event, body, logger } = input;
+        const { event, deliveryId, body, logger } = input;
 
         const pipelineId = getNestedString(body, ["repository", "full_name"]) ?? "unknown/unknown";
         const triggeredBy = getNestedString(body, ["sender", "login"]) ?? "unknown";
@@ -58,6 +59,22 @@ export const webhookService = {
         if (commitSha === null || branch === null) {
           logger.warn({ event, pipelineId }, "webhook missing required fields; run not created");
           return;
+        }
+
+        if (deliveryId !== undefined && deliveryId !== "") {
+          try {
+            await WebhookDelivery.create({ deliveryId, event, pipelineId });
+          } catch (err) {
+            // Duplicate key => GitHub retry: ignore safely.
+            const code = typeof err === "object" && err !== null ? (err as Record<string, unknown>).code : undefined;
+            if (code === 11000) {
+              logger.info({ deliveryId, event, pipelineId }, "duplicate webhook delivery ignored");
+              return;
+            }
+            throw err;
+          }
+        } else {
+          logger.warn({ event, pipelineId }, "missing x-github-delivery header; webhook is not idempotent");
         }
 
         const run = await Run.create({

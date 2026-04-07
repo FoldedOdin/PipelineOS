@@ -114,6 +114,14 @@ async function setRunStatus(runId: string, status: string): Promise<void> {
   });
 }
 
+async function heartbeatRun(runId: string): Promise<void> {
+  await apiFetch(`/internal/runs/${runId}/heartbeat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
 async function ensureImage(docker: ReturnType<typeof createDockerClient>, image: string, logger: Logger): Promise<void> {
   try {
     await docker.getImage(image).inspect();
@@ -228,7 +236,13 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   const pipelineId = typeof pipelineIdValue === "string" ? pipelineIdValue : null;
   const commitShaValue = (claimed as Record<string, unknown>).commitSha;
   const commitSha = typeof commitShaValue === "string" ? commitShaValue : null;
+  let heartbeatInterval: NodeJS.Timeout | null = null;
   try {
+    // Keep the run "fresh" while we work, so the API can detect stale runners.
+    heartbeatInterval = setInterval(() => {
+      void heartbeatRun(runId);
+    }, 10_000);
+
     let pipeline: PipelineDefinition = demoPipeline();
     if (pipelineId && commitSha) {
       const yaml = await fetchPipelineYaml(pipelineId, commitSha, logger);
@@ -243,5 +257,9 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   } catch (err) {
     logger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
+  } finally {
+    if (heartbeatInterval !== null) {
+      clearInterval(heartbeatInterval);
+    }
   }
 }

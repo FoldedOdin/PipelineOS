@@ -15,8 +15,10 @@ webhooksRouter.post("/api/webhooks/github", validateGithubWebhook, (req, res) =>
     return;
   }
 
+  const deliveryId = req.header("x-github-delivery") ?? undefined;
   webhookService.enqueueGithubEvent({
     event,
+    deliveryId,
     body: req.body as unknown,
     logger: req.log,
   });

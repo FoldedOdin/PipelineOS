@@ -35,6 +35,7 @@ const runSchema = new Schema(
     startedAt: { type: Date, default: null },
     finishedAt: { type: Date, default: null },
     durationMs: { type: Schema.Types.Mixed, default: null },
+    lastHeartbeatAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: false } },
 );

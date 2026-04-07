@@ -73,6 +73,19 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
   }
 });
 
+runnerRouter.post("/internal/runs/:id/heartbeat", async (req, res, next) => {
+  try {
+    const ok = await runnerService.heartbeatRun(req.params.id);
+    if (!ok) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
   try {
     const pipelineId = req.params.pipelineId;

@@ -3,8 +3,10 @@ import http from "node:http";
 import pino from "pino";
 import type { Logger } from "pino";
 import { createApp } from "./app.js";
+import { validateApiConfig } from "./config.js";
 import { connectDb } from "./db.js";
 import { getWebhookQueue } from "./services/queueService.js";
+import { startStaleRunRecovery } from "./services/staleRunRecovery.js";
 import { attachLogWebSocketServer } from "./ws/logStream.js";
 
 function createRootLogger(): Logger {
@@ -18,8 +20,10 @@ function createRootLogger(): Logger {
 const logger = createRootLogger();
 
 async function main(): Promise<void> {
+  validateApiConfig(logger);
   await connectDb(logger);
   getWebhookQueue();
+  const recovery = startStaleRunRecovery(logger);
   const app = createApp(logger);
   const server = http.createServer(app);
   attachLogWebSocketServer(server, logger);
@@ -27,6 +31,25 @@ async function main(): Promise<void> {
   server.listen(port, "0.0.0.0", () => {
     logger.info({ port }, "api listening");
   });
+
+  const shutdown = (signal: string): void => {
+    logger.info({ signal }, "api shutting down");
+    const timeoutMs = 15_000;
+    const timeout = setTimeout(() => {
+      logger.error({ timeoutMs }, "api shutdown timeout exceeded; exiting");
+      process.exit(1);
+    }, timeoutMs);
+
+    server.close(() => {
+      recovery.stop();
+      clearTimeout(timeout);
+      logger.info("api server closed");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err: unknown) => {

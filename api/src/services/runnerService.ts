@@ -1,5 +1,6 @@
 import { isValidObjectId } from "mongoose";
 import { Run } from "../models/Run.js";
+import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
 type StageStatus = "pending" | "running" | "success" | "failed" | "skipped";
@@ -43,13 +44,19 @@ export const runnerService = {
   async claimNextQueuedRun(): Promise<Record<string, unknown> | null> {
     const doc = await Run.findOneAndUpdate(
       { status: "queued" },
-      { $set: { status: "running", startedAt: new Date() } },
+      { $set: { status: "running", startedAt: new Date(), lastHeartbeatAt: new Date() } },
       { sort: { createdAt: 1 }, new: true },
     )
       .lean<Record<string, unknown>>()
       .exec();
 
     return doc;
+  },
+
+  async heartbeatRun(runId: string): Promise<boolean> {
+    if (!isValidObjectId(runId)) return false;
+    const updated = await Run.findByIdAndUpdate(runId, { $set: { lastHeartbeatAt: new Date() } }).exec();
+    return updated !== null;
   },
 
   async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {
@@ -64,6 +71,9 @@ export const runnerService = {
     }
 
     const updated = await Run.findByIdAndUpdate(runId, { $set: patch }, { new: true }).lean<Record<string, unknown>>().exec();
+    if (updated !== null) {
+      publishRunStatus(runId, status);
+    }
     return updated;
   },
 
@@ -131,6 +141,7 @@ export const runnerService = {
     }
 
     await run.save();
+    publishStageStatus(runId, stageName, status);
     return true;
   },
 
@@ -146,8 +157,16 @@ export const runnerService = {
     const stage = stages.find((s) => s.name === stageName);
     if (stage === undefined) return false;
 
-    stage.logs = `${stage.logs}${logs}`;
+    const maxChunkChars = 16_384;
+    const maxStoredChars = 1_000_000;
+    const chunk = logs.length > maxChunkChars ? logs.slice(-maxChunkChars) : logs;
+
+    stage.logs = `${stage.logs}${chunk}`;
+    if (stage.logs.length > maxStoredChars) {
+      stage.logs = stage.logs.slice(-maxStoredChars);
+    }
     await run.save();
+    publishStageLog(runId, stageName, chunk);
     return true;
   },
 } as const;
