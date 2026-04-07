@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import LiveLogs from "./pages/LiveLogs";
 import Dashboard from "./pages/Dashboard";
+import RemediationRules from "./pages/RemediationRules";
 import RunDetail from "./pages/RunDetail";
 import RunsList from "./pages/RunsList";
 
@@ -21,6 +22,9 @@ export default function App(): ReactElement {
             <Link className="text-slate-300 hover:text-white" to="/dashboard">
               Dashboard
             </Link>
+            <Link className="text-slate-300 hover:text-white" to="/rules">
+              Rules
+            </Link>
           </nav>
         </div>
       </header>
@@ -31,6 +35,7 @@ export default function App(): ReactElement {
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/runs/:id/logs" element={<LiveLogs />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/rules" element={<RemediationRules />} />
         </Routes>
       </main>
     </div>

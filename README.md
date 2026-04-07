@@ -42,6 +42,23 @@ PipelineOS is a self-hosted CI runner + intelligence layer:
 
 3. Open the dashboard at [http://localhost:3000](http://localhost:3000) and the API health check at [http://localhost:3001/health](http://localhost:3001/health).
 
+## Demo flow (end-to-end)
+
+1. Configure a GitHub webhook on your repo pointing to:
+   - `POST /api/webhooks/github`
+2. Push a commit or open a PR in that repo.
+3. Open the dashboard:
+   - `/runs` for run history
+   - Click a run → stage logs + diagnosis
+   - `/dashboard?pipelineId=owner/repo` for flakiness/heatmap/costs
+
+## Troubleshooting
+
+- **Webhook returns `401 invalid_signature`**: ensure `GITHUB_WEBHOOK_SECRET` matches GitHub’s webhook secret.
+- **Runner returns `401 invalid_internal_api_key`**: ensure API + runner share the same `INTERNAL_API_KEY`.
+- **Runner can’t access Docker**: ensure Docker socket is mounted and `DOCKER_SOCKET=/var/run/docker.sock` in `deploy/.env`.
+- **No runs created**: verify GitHub is sending `push` or `pull_request` events and the API is reachable from GitHub (use a tunnel if running locally).
+
 ## Services
 
 | Service  | Port  | Role                                      |
@@ -95,6 +112,7 @@ All config is via environment variables (see `deploy/.env.example`).
 ## Documentation
 
 - [Pipeline YAML schema](docs/pipeline-schema.md)
+- [Architecture](docs/architecture.md)
 - Product/decision docs live under `docs/`
 
 ## Security
