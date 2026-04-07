@@ -2,9 +2,37 @@ import { isValidObjectId } from "mongoose";
 import { Run } from "../models/Run.js";
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
+type StageStatus = "pending" | "running" | "success" | "failed" | "skipped";
+
+interface StageDoc {
+  name: string;
+  status: StageStatus;
+  image: string;
+  command: string;
+  exitCode: number | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  logs: string;
+}
 
 function requiredString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
+}
+
+function readStringField(body: unknown, key: string): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  return requiredString((body as Record<string, unknown>)[key]);
+}
+
+function readNumberField(body: unknown, key: string): number | null {
+  if (typeof body !== "object" || body === null) return null;
+  const value = (body as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isStageStatus(value: unknown): value is StageStatus {
+  return value === "pending" || value === "running" || value === "success" || value === "failed" || value === "skipped";
 }
 
 function isRunStatus(value: unknown): value is RunStatus {
@@ -12,21 +40,22 @@ function isRunStatus(value: unknown): value is RunStatus {
 }
 
 export const runnerService = {
-  async claimNextQueuedRun(): Promise<unknown | null> {
+  async claimNextQueuedRun(): Promise<Record<string, unknown> | null> {
     const doc = await Run.findOneAndUpdate(
       { status: "queued" },
       { $set: { status: "running", startedAt: new Date() } },
       { sort: { createdAt: 1 }, new: true },
     )
-      .lean()
+      .lean<Record<string, unknown>>()
       .exec();
 
     return doc;
   },
 
-  async updateRunStatus(runId: string, body: unknown): Promise<unknown | null> {
+  async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {
     if (!isValidObjectId(runId)) return null;
-    const status = isRunStatus((body as any)?.status) ? ((body as any).status as RunStatus) : null;
+    const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
+    const status = isRunStatus(statusValue) ? statusValue : null;
     if (status === null) return null;
 
     const patch: Record<string, unknown> = { status };
@@ -34,22 +63,90 @@ export const runnerService = {
       patch.finishedAt = new Date();
     }
 
-    const updated = await Run.findByIdAndUpdate(runId, { $set: patch }, { new: true }).lean().exec();
+    const updated = await Run.findByIdAndUpdate(runId, { $set: patch }, { new: true }).lean<Record<string, unknown>>().exec();
     return updated;
+  },
+
+  async upsertStage(runId: string, stageName: string, body: unknown): Promise<boolean> {
+    if (!isValidObjectId(runId)) return false;
+    const image = readStringField(body, "image");
+    const command = readStringField(body, "command");
+    if (image === null || command === null) return false;
+
+    const run = await Run.findById(runId).exec();
+    if (run === null) return false;
+
+    const stages = run.stages as unknown as StageDoc[];
+    const existing = stages.find((s) => s.name === stageName);
+    if (existing) {
+      existing.image = image;
+      existing.command = command;
+      await run.save();
+      return true;
+    }
+
+    stages.push({
+      name: stageName,
+      status: "pending",
+      image,
+      command,
+      exitCode: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      logs: "",
+    });
+    await run.save();
+    return true;
+  },
+
+  async updateStageStatus(runId: string, stageName: string, body: unknown): Promise<boolean> {
+    if (!isValidObjectId(runId)) return false;
+    const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
+    const status = isStageStatus(statusValue) ? statusValue : null;
+    const exitCode = readNumberField(body, "exitCode");
+    if (status === null) return false;
+
+    const run = await Run.findById(runId).exec();
+    if (run === null) return false;
+
+    const stages = run.stages as unknown as StageDoc[];
+    const stage = stages.find((s) => s.name === stageName);
+    if (stage === undefined) return false;
+
+    stage.status = status;
+    if (status === "running") {
+      stage.startedAt = new Date();
+      stage.finishedAt = null;
+      stage.durationMs = null;
+      stage.exitCode = null;
+    } else if (status === "success" || status === "failed" || status === "skipped") {
+      stage.finishedAt = new Date();
+      if (stage.startedAt instanceof Date) {
+        stage.durationMs = stage.finishedAt.getTime() - stage.startedAt.getTime();
+      }
+      if (exitCode !== null) {
+        stage.exitCode = exitCode;
+      }
+    }
+
+    await run.save();
+    return true;
   },
 
   async appendStageLogs(runId: string, stageName: string, body: unknown): Promise<boolean> {
     if (!isValidObjectId(runId)) return false;
-    const logs = requiredString((body as any)?.logs);
+    const logs = readStringField(body, "logs");
     if (logs === null) return false;
 
     const run = await Run.findById(runId).exec();
     if (run === null) return false;
 
-    const stage = run.stages.find((s: any) => s?.name === stageName);
-    if (!stage) return false;
+    const stages = run.stages as unknown as StageDoc[];
+    const stage = stages.find((s) => s.name === stageName);
+    if (stage === undefined) return false;
 
-    stage.logs = `${stage.logs ?? ""}${logs}`;
+    stage.logs = `${stage.logs}${logs}`;
     await run.save();
     return true;
   },

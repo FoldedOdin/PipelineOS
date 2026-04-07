@@ -17,7 +17,7 @@ webhooksRouter.post("/api/webhooks/github", validateGithubWebhook, (req, res) =>
 
   webhookService.enqueueGithubEvent({
     event,
-    body: req.body,
+    body: req.body as unknown,
     logger: req.log,
   });
 

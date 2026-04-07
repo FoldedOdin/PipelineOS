@@ -11,7 +11,7 @@ export interface RunsListResult {
   page: number;
   limit: number;
   total: number;
-  items: unknown[];
+  items: Record<string, unknown>[];
 }
 
 function clampPositiveInt(value: number, fallback: number): number {
@@ -31,24 +31,26 @@ export const runService = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean()
+        .lean<Record<string, unknown>>()
         .exec(),
     ]);
 
     return { page, limit, total, items: docs };
   },
 
-  async getRunById(id: string): Promise<unknown | null> {
+  async getRunById(id: string): Promise<Record<string, unknown> | null> {
     if (!isValidObjectId(id)) return null;
-    return await Run.findById(id).lean().exec();
+    return await Run.findById(id).lean<Record<string, unknown>>().exec();
   },
 
   async getStageLogs(runId: string, stageName: string): Promise<string | null> {
     if (!isValidObjectId(runId)) return null;
-    const run = await Run.findById(runId).select({ stages: 1 }).lean().exec();
+    const run = await Run.findById(runId).select({ stages: 1 }).lean<{ stages?: unknown[] }>().exec();
     if (run === null) return null;
-    const stage = (run.stages ?? []).find((s: any) => s?.name === stageName);
-    if (!stage) return null;
-    return typeof stage.logs === "string" ? stage.logs : "";
+    const stages = Array.isArray(run.stages) ? run.stages : [];
+    const stage = stages.find((s) => typeof s === "object" && s !== null && (s as Record<string, unknown>).name === stageName);
+    if (stage === undefined) return null;
+    const logs = (stage as Record<string, unknown>).logs;
+    return typeof logs === "string" ? logs : "";
   },
 } as const;

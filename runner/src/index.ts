@@ -19,8 +19,17 @@ const logger = createRunnerLogger();
 function main(): void {
   const intervalMs = 2000;
   logger.info({ intervalMs }, "runner scaffold started; polling loop reserved");
+  let inFlight = false;
   setInterval(() => {
-    void executeQueuedRun();
+    if (inFlight) return;
+    inFlight = true;
+    executeQueuedRun(logger)
+      .catch((err: unknown) => {
+        logger.error({ err }, "runner loop iteration failed");
+      })
+      .finally(() => {
+        inFlight = false;
+      });
     logger.debug("runner heartbeat");
   }, intervalMs);
 }

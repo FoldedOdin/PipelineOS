@@ -20,7 +20,7 @@ export const validateGithubWebhook: RequestHandler = (req, res, next) => {
   }
 
   const signatureHeader = req.header("x-hub-signature-256");
-  if (signatureHeader === undefined || !signatureHeader.startsWith("sha256=")) {
+  if (!signatureHeader?.startsWith("sha256=")) {
     res.status(401).json({ error: "missing_signature" });
     return;
   }

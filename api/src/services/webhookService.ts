@@ -8,7 +8,7 @@ import { getWebhookQueue } from "./queueService.js";
 
 type GithubEventName = "push" | "pull_request";
 
-type GithubWebhookBody = any;
+type GithubWebhookBody = unknown;
 
 function parseBranchFromRef(ref: unknown): string | null {
   if (typeof ref !== "string" || ref === "") return null;
@@ -21,6 +21,19 @@ function requiredString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+function getNested(body: unknown, path: string[]): unknown {
+  let cur: unknown = body;
+  for (const key of path) {
+    if (typeof cur !== "object" || cur === null) return undefined;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur;
+}
+
+function getNestedString(body: unknown, path: string[]): string | null {
+  return requiredString(getNested(body, path));
+}
+
 export const webhookService = {
   enqueueGithubEvent(input: { event: GithubEventName; body: GithubWebhookBody; logger: Logger }): void {
     const queue = getWebhookQueue();
@@ -28,18 +41,18 @@ export const webhookService = {
       .add(async () => {
         const { event, body, logger } = input;
 
-        const pipelineId = requiredString(body?.repository?.full_name) ?? "unknown/unknown";
-        const triggeredBy = requiredString(body?.sender?.login) ?? "unknown";
+        const pipelineId = getNestedString(body, ["repository", "full_name"]) ?? "unknown/unknown";
+        const triggeredBy = getNestedString(body, ["sender", "login"]) ?? "unknown";
 
         let commitSha: string | null = null;
         let branch: string | null = null;
 
         if (event === "push") {
-          commitSha = requiredString(body?.after);
-          branch = parseBranchFromRef(body?.ref);
-        } else if (event === "pull_request") {
-          commitSha = requiredString(body?.pull_request?.head?.sha);
-          branch = requiredString(body?.pull_request?.head?.ref);
+          commitSha = getNestedString(body, ["after"]);
+          branch = parseBranchFromRef(getNested(body, ["ref"]));
+        } else {
+          commitSha = getNestedString(body, ["pull_request", "head", "sha"]);
+          branch = getNestedString(body, ["pull_request", "head", "ref"]);
         }
 
         if (commitSha === null || branch === null) {

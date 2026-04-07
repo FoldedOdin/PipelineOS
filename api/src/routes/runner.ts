@@ -45,3 +45,29 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/logs", async (req, res, 
   }
 });
 
+runnerRouter.put("/internal/runs/:id/stages/:stageName", async (req, res, next) => {
+  try {
+    const ok = await runnerService.upsertStage(req.params.id, req.params.stageName, req.body);
+    if (!ok) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res, next) => {
+  try {
+    const ok = await runnerService.updateStageStatus(req.params.id, req.params.stageName, req.body);
+    if (!ok) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
