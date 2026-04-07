@@ -1,5 +1,45 @@
 import mongoose, { Schema } from "mongoose";
 
+export type RunStageStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
+export type RunEvent = "push" | "pull_request";
+
+export interface RunStageMetrics {
+  cpuSeconds: number | null;
+  cpuPercentAvg: number | null;
+  cpuPercentMax: number | null;
+  memBytesMax: number | null;
+  costUsdEstimated: number | null;
+}
+
+export interface RunStageResult {
+  name: string;
+  status: RunStageStatus;
+  image: string;
+  command: string;
+  exitCode: number | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  logs: string;
+  metrics: RunStageMetrics;
+}
+
+export interface RunSchemaType {
+  pipelineId: string;
+  commitSha: string;
+  branch: string;
+  triggeredBy: string;
+  event: RunEvent;
+  status: RunStatus;
+  stages: RunStageResult[];
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  lastHeartbeatAt: Date | null;
+  createdAt: Date;
+}
+
 const stageResultSchema = new Schema(
   {
     name: { type: String, required: true },
@@ -26,7 +66,7 @@ const stageResultSchema = new Schema(
   { _id: false },
 );
 
-const runSchema = new Schema(
+const runSchema = new Schema<RunSchemaType>(
   {
     pipelineId: { type: String, required: true },
     commitSha: { type: String, required: true },
@@ -41,11 +81,12 @@ const runSchema = new Schema(
     stages: { type: [stageResultSchema], default: [] },
     startedAt: { type: Date, default: null },
     finishedAt: { type: Date, default: null },
-    durationMs: { type: Schema.Types.Mixed, default: null },
+    durationMs: { type: Number, default: null },
     lastHeartbeatAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: false } },
 );
 
-export type RunDocument = mongoose.HydratedDocument<mongoose.InferSchemaType<typeof runSchema>>;
-export const Run = mongoose.model("Run", runSchema);
+export type RunDocument = mongoose.HydratedDocument<RunSchemaType>;
+
+export const Run = mongoose.model<RunSchemaType>("Run", runSchema);

@@ -51,17 +51,39 @@ function optionalEnvNumber(name: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function isHeaderTupleArray(value: unknown): value is [string, string][] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string" && typeof entry[1] === "string",
+    )
+  );
+}
+
+function isHeaderRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== "object" || value === null) return false;
+  if (Array.isArray(value)) return false;
+  if (value instanceof Headers) return false;
+  return Object.values(value as Record<string, unknown>).every((v) => typeof v === "string");
+}
+
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const apiUrl = requiredEnv("API_URL").replace(/\/$/, "");
   const internalKey = requiredEnv("INTERNAL_API_KEY");
   if (looksLikePlaceholder(internalKey)) {
     throw new Error("INTERNAL_API_KEY is a placeholder; set a real value in deploy/.env");
   }
+
+  const hdrs: unknown = init?.headers;
+  const extraHeaders: Record<string, string> =
+    hdrs instanceof Headers ? Object.fromEntries(hdrs.entries()) : isHeaderTupleArray(hdrs) ? Object.fromEntries(hdrs) : isHeaderRecord(hdrs) ? hdrs : {};
+
   return await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       "x-internal-api-key": internalKey,
-      ...(init?.headers ?? {}),
+      ...extraHeaders,
     },
   });
 }
@@ -361,7 +383,7 @@ async function runContainerWithStats(input: {
       const cpuUsage = typeof cpuStats.cpu_usage === "object" && cpuStats.cpu_usage !== null ? (cpuStats.cpu_usage as Record<string, unknown>) : {};
       const totalUsage = cpuUsage.total_usage;
       if (typeof totalUsage === "number" && Number.isFinite(totalUsage)) {
-        if (firstCpuTotal === null) firstCpuTotal = totalUsage;
+        firstCpuTotal ??= totalUsage;
         lastCpuTotal = totalUsage;
       }
 

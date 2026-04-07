@@ -90,7 +90,7 @@ export const webhookService = {
           durationMs: null,
         });
 
-        logger.info({ runId: run._id.toString(), pipelineId, event }, "queued run created from webhook");
+        logger.info({ runId: String(run._id), pipelineId, event }, "queued run created from webhook");
       })
       .catch(() => undefined);
   },
