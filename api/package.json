@@ -30,7 +30,7 @@
     "@types/pino-http": "^5.8.4",
     "@types/supertest": "6.0.2",
     "@types/ws": "8.18.1",
-    "eslint": "9.17.0",
+    "eslint": "10.2.0",
     "eslint-config-prettier": "9.1.0",
     "globals": "17.4.0",
     "prettier": "3.4.2",
