@@ -26,6 +26,11 @@ export function validateRunnerConfig(logger: Logger): void {
     throw new Error("INTERNAL_API_KEY is a placeholder; set a real value");
   }
 
+  const runnerId = requiredEnv("RUNNER_ID");
+  if (looksLikePlaceholder(runnerId)) {
+    throw new Error("RUNNER_ID is a placeholder; set a real value");
+  }
+
   const maxConcurrentRaw = optionalEnv("MAX_CONCURRENT_RUNS");
   if (maxConcurrentRaw) {
     const n = Number(maxConcurrentRaw);

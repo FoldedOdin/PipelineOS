@@ -74,6 +74,10 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   if (looksLikePlaceholder(internalKey)) {
     throw new Error("INTERNAL_API_KEY is a placeholder; set a real value in deploy/.env");
   }
+  const runnerId = requiredEnv("RUNNER_ID");
+  if (looksLikePlaceholder(runnerId)) {
+    throw new Error("RUNNER_ID is a placeholder; set a real value in deploy/.env");
+  }
 
   const hdrs: unknown = init?.headers;
   const extraHeaders: Record<string, string> =
@@ -83,6 +87,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
     ...init,
     headers: {
       "x-internal-api-key": internalKey,
+      "x-runner-id": runnerId,
       ...extraHeaders,
     },
   });

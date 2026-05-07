@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BullMQ worker scaffolding for Redis-backed webhook processing.
 - Webhook ingress now enqueues jobs via BullMQ (durable Redis-backed queue).
 - Run claiming now uses a renewable lease (`claimedBy`, `claimExpiresAt`) for multi-runner safety.
+- Runner identity (`RUNNER_ID` / `x-runner-id`) is now used to renew claim leases.
 
 ## [0.1.0] - 2026-04-07
 
