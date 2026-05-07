@@ -27,6 +27,7 @@ export function validateApiConfig(logger: Logger): void {
   }
 
   requiredEnv("MONGODB_URI");
+  requiredEnv("REDIS_URL");
 
   const internalKey = requiredEnv("INTERNAL_API_KEY");
   if (looksLikePlaceholder(internalKey)) {
