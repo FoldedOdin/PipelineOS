@@ -5,6 +5,13 @@ import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/log
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
 type StageStatus = "pending" | "running" | "success" | "failed" | "skipped";
+type RunnerId = string;
+
+function minutesToMs(minutes: number): number {
+  return minutes * 60 * 1000;
+}
+
+const claimLeaseMs = minutesToMs(1);
 
 interface StageDoc {
   name: string;
@@ -56,10 +63,23 @@ function isRunStatus(value: unknown): value is RunStatus {
 }
 
 export const runnerService = {
-  async claimNextQueuedRun(): Promise<Record<string, unknown> | null> {
+  async claimNextQueuedRun(runnerId: RunnerId): Promise<Record<string, unknown> | null> {
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + claimLeaseMs);
     const doc = await Run.findOneAndUpdate(
-      { status: "queued" },
-      { $set: { status: "running", startedAt: new Date(), lastHeartbeatAt: new Date() } },
+      {
+        status: "queued",
+        $or: [{ claimExpiresAt: null }, { claimExpiresAt: { $lte: now } }],
+      },
+      {
+        $set: {
+          status: "running",
+          startedAt: now,
+          lastHeartbeatAt: now,
+          claimedBy: runnerId,
+          claimExpiresAt: leaseUntil,
+        },
+      },
       { sort: { createdAt: 1 }, new: true },
     )
       .lean<Record<string, unknown>>()
@@ -68,9 +88,14 @@ export const runnerService = {
     return doc;
   },
 
-  async heartbeatRun(runId: string): Promise<boolean> {
+  async heartbeatRun(runId: string, runnerId: RunnerId): Promise<boolean> {
     if (!isValidObjectId(runId)) return false;
-    const updated = await Run.findByIdAndUpdate(runId, { $set: { lastHeartbeatAt: new Date() } }).exec();
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + claimLeaseMs);
+    const updated = await Run.findOneAndUpdate(
+      { _id: runId, status: "running", claimedBy: runnerId },
+      { $set: { lastHeartbeatAt: now, claimExpiresAt: leaseUntil } },
+    ).exec();
     return updated !== null;
   },
 
@@ -83,6 +108,8 @@ export const runnerService = {
     const patch: Record<string, unknown> = { status };
     if (status === "success" || status === "failed" || status === "cancelled") {
       patch.finishedAt = new Date();
+      patch.claimedBy = null;
+      patch.claimExpiresAt = null;
     }
 
     const updated = await Run.findByIdAndUpdate(runId, { $set: patch }, { new: true }).lean<Record<string, unknown>>().exec();

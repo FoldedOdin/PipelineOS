@@ -9,9 +9,17 @@ export const runnerRouter = Router();
 
 runnerRouter.use("/internal", requireInternalApiKey);
 
-runnerRouter.post("/internal/runs/claim", async (_req, res, next) => {
+function readRunnerId(req: { header: (name: string) => string | undefined }, logger: { warn: (o: unknown, msg: string) => void }): string {
+  const raw = req.header("x-runner-id");
+  if (raw && raw.trim() !== "") return raw.trim();
+  logger.warn({}, "missing x-runner-id header; using legacy runner id");
+  return "legacy-runner";
+}
+
+runnerRouter.post("/internal/runs/claim", async (req, res, next) => {
   try {
-    const run = await runnerService.claimNextQueuedRun();
+    const runnerId = readRunnerId(req, req.log);
+    const run = await runnerService.claimNextQueuedRun(runnerId);
     if (run === null) {
       res.status(204).send();
       return;
@@ -89,7 +97,8 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/metrics", async (req, re
 
 runnerRouter.post("/internal/runs/:id/heartbeat", async (req, res, next) => {
   try {
-    const ok = await runnerService.heartbeatRun(req.params.id);
+    const runnerId = readRunnerId(req, req.log);
+    const ok = await runnerService.heartbeatRun(req.params.id, runnerId);
     if (!ok) {
       res.status(404).json({ error: "not_found" });
       return;

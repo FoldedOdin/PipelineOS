@@ -37,6 +37,8 @@ export interface RunSchemaType {
   finishedAt: Date | null;
   durationMs: number | null;
   lastHeartbeatAt: Date | null;
+  claimedBy: string | null;
+  claimExpiresAt: Date | null;
   createdAt: Date;
 }
 
@@ -83,6 +85,8 @@ const runSchema = new Schema<RunSchemaType>(
     finishedAt: { type: Date, default: null },
     durationMs: { type: Number, default: null },
     lastHeartbeatAt: { type: Date, default: null },
+    claimedBy: { type: String, default: null },
+    claimExpiresAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: false } },
 );

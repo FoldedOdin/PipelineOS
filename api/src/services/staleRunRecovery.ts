@@ -19,7 +19,13 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
     const candidates = await Run.find({
       status: "running",
       startedAt: { $ne: null, $lte: staleBefore },
-      $or: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { $lte: staleBefore } }],
+      $or: [
+        // Preferred: lease expiry for multi-runner safe claiming.
+        { claimExpiresAt: { $ne: null, $lte: new Date() } },
+        // Backwards-compatible fallback: heartbeat-based staleness.
+        { lastHeartbeatAt: null },
+        { lastHeartbeatAt: { $lte: staleBefore } },
+      ],
     })
       .limit(25)
       .exec();
