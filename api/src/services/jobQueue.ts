@@ -21,6 +21,8 @@ function requiredEnv(name: string): string {
 
 export const githubWebhookQueueName = "github-webhooks";
 
+let queue: Queue<GithubWebhookJob> | undefined;
+
 function connectionFromRedisUrl(redisUrl: string): ConnectionOptions {
   const url = new URL(redisUrl);
   const port = url.port ? Number(url.port) : 6379;
@@ -54,6 +56,17 @@ export function createGithubWebhookQueue(connection: ConnectionOptions): Queue<G
   });
 }
 
+function getGithubWebhookQueue(): Queue<GithubWebhookJob> {
+  queue ??= createGithubWebhookQueue(connectionFromRedisUrl(requiredEnv("REDIS_URL")));
+  return queue;
+}
+
+export async function enqueueGithubWebhookJob(input: GithubWebhookJob): Promise<void> {
+  const q = getGithubWebhookQueue();
+  const jobId = input.deliveryId && input.deliveryId !== "" ? input.deliveryId : undefined;
+  await q.add("github", input, { jobId });
+}
+
 let worker: Worker<GithubWebhookJob> | undefined;
 
 export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<void> } {
@@ -66,7 +79,7 @@ export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<
   }
 
   const connection = connectionFromRedisUrl(requiredEnv("REDIS_URL"));
-  const queue = createGithubWebhookQueue(connection);
+  queue ??= createGithubWebhookQueue(connection);
 
   worker = new Worker<GithubWebhookJob>(
     githubWebhookQueueName,
@@ -97,6 +110,7 @@ export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<
       worker = undefined;
       await w?.close();
       await queue.close();
+      queue = undefined;
     },
   };
 }

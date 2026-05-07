@@ -5,7 +5,6 @@ import type { Logger } from "pino";
 import { createApp } from "./app.js";
 import { validateApiConfig } from "./config.js";
 import { connectDb } from "./db.js";
-import { getWebhookQueue } from "./services/queueService.js";
 import { startGithubWebhookWorker } from "./services/jobQueue.js";
 import { startStaleRunRecovery } from "./services/staleRunRecovery.js";
 import { attachLogWebSocketServer } from "./ws/logStream.js";
@@ -21,7 +20,6 @@ const logger = createRootLogger();
 async function main(): Promise<void> {
   validateApiConfig(logger);
   await connectDb(logger);
-  getWebhookQueue();
   const webhookWorker = startGithubWebhookWorker(logger);
   const recovery = startStaleRunRecovery(logger);
   const app = createApp(logger);

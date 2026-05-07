@@ -5,7 +5,6 @@
 import type { Logger } from "pino";
 import { Run } from "../models/Run.js";
 import { WebhookDelivery } from "../models/WebhookDelivery.js";
-import { getWebhookQueue } from "./queueService.js";
 type GithubEventName = "push" | "pull_request";
 
 type GithubWebhookBody = unknown;
@@ -95,10 +94,7 @@ export async function processGithubWebhookEvent(input: {
 
 export const webhookService = {
   enqueueGithubEvent(input: { event: GithubEventName; deliveryId: string | undefined; body: GithubWebhookBody; logger: Logger }): void {
-    // Kept for backwards compatibility while webhook ingestion is migrated to Redis-backed queues.
-    const queue = getWebhookQueue();
-    queue.add(async () => {
-      await processGithubWebhookEvent(input);
-    }).catch(() => undefined);
+    // Backwards-compatible wrapper (unused once webhook route enqueues BullMQ jobs).
+    void processGithubWebhookEvent(input).catch(() => undefined);
   },
 } as const;

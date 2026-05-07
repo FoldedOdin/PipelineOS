@@ -1,7 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { validateGithubWebhook } from "../middleware/validateWebhook.js";
-import { webhookService } from "../services/webhookService.js";
+import { enqueueGithubWebhookJob } from "../services/jobQueue.js";
 
 /**
  * GitHub webhook ingress (`POST /api/webhooks/github`).
@@ -24,11 +24,8 @@ webhooksRouter.post("/api/webhooks/github", githubWebhookLimiter, validateGithub
   }
 
   const deliveryId = req.header("x-github-delivery") ?? undefined;
-  webhookService.enqueueGithubEvent({
-    event,
-    deliveryId,
-    body: req.body as unknown,
-    logger: req.log,
+  void enqueueGithubWebhookJob({ event, deliveryId, body: req.body as unknown }).catch((err: unknown) => {
+    req.log.error({ err }, "failed to enqueue github webhook job");
   });
 
   // Return quickly to stay within GitHub webhook time limits.
