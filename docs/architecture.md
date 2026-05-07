@@ -21,7 +21,11 @@ This matches Docker’s rule that relative `build` and `volumes` paths are resol
 
 ## Process queue
 
-Webhook handling enqueues asynchronous work with **p-queue** inside the API process (no Redis/Bull in Phase 1). This keeps webhook responses under GitHub’s time budget while persisting runs safely.
+Webhook handling enqueues asynchronous work with **BullMQ** backed by **Redis**. This keeps webhook responses under GitHub’s time budget while persisting runs safely and allowing multiple API processes/runners in later phases.
+
+## Runner claiming
+
+Runners claim work using a **renewable lease** stored on the run document (`claimedBy`, `claimExpiresAt`) and renewed via periodic heartbeats. This reduces race conditions and prevents long-lived zombie runs when runners crash.
 
 ## Observability
 
@@ -29,4 +33,4 @@ Structured logging uses **pino** in Node services. Avoid unstructured `console.l
 
 ## Out of scope (Phase 1)
 
-Kubernetes runners, multi-tenant auth, Redis queues, Prometheus/Grafana, and AI-assisted diagnosis are explicitly deferred.
+Kubernetes runners, multi-tenant auth, Prometheus/Grafana, and expanded AI-assisted diagnosis are explicitly deferred.

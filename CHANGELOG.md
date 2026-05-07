@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run claiming now uses a renewable lease (`claimedBy`, `claimExpiresAt`) for multi-runner safety.
 - Runner identity (`RUNNER_ID` / `x-runner-id`) is now used to renew claim leases.
 
+### Documentation
+
+- Update architecture docs for Redis/BullMQ queueing and lease-based claiming.
+
 ## [0.1.0] - 2026-04-07
 
 ### Added

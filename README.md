@@ -46,6 +46,13 @@ INTERNAL_API_KEY=any_long_random_string     # Runner ↔ API auth
 JWT_SECRET=any_long_random_string           # Reserved for future dashboard auth
 ```
 
+You can keep the defaults for:
+
+```bash
+REDIS_URL=redis://redis:6379   # BullMQ queue backend (required service, default URL is fine in Compose)
+RUNNER_ID=runner-1             # Identity used for run claim leases
+```
+
 ```bash
 # 2. Start everything
 make dev
