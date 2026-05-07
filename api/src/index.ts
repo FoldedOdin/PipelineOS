@@ -6,6 +6,7 @@ import { createApp } from "./app.js";
 import { validateApiConfig } from "./config.js";
 import { connectDb } from "./db.js";
 import { getWebhookQueue } from "./services/queueService.js";
+import { startGithubWebhookWorker } from "./services/jobQueue.js";
 import { startStaleRunRecovery } from "./services/staleRunRecovery.js";
 import { attachLogWebSocketServer } from "./ws/logStream.js";
 
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   validateApiConfig(logger);
   await connectDb(logger);
   getWebhookQueue();
+  const webhookWorker = startGithubWebhookWorker(logger);
   const recovery = startStaleRunRecovery(logger);
   const app = createApp(logger);
   const server = http.createServer(app);
@@ -39,6 +41,7 @@ async function main(): Promise<void> {
     }, timeoutMs);
 
     server.close(() => {
+      void webhookWorker.stop().catch(() => undefined);
       recovery.stop();
       clearTimeout(timeout);
       logger.info("api server closed");

@@ -14,9 +14,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "bullmq": "5.56.0",
     "dotenv": "16.4.5",
     "express": "5.2.1",
     "express-rate-limit": "^8.3.2",
+    "ioredis": "5.7.0",
     "mongoose": "9.4.1",
     "p-queue": "9.1.2",
     "pino": "10.3.1",
