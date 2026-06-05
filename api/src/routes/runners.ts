@@ -17,7 +17,7 @@ runnersRouter.post("/internal/runners/heartbeat", requireInternalApiKey, async (
   }
 });
 
-runnersRouter.get("/api/runners", async (req, res, next) => {
+runnersRouter.get("/api/runners", async (_req, res, next) => {
   try {
     const runners = await runnerService.listRunners();
     res.status(200).json({ runners });

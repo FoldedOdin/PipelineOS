@@ -11,6 +11,7 @@ export interface PipelineStage {
 
 export interface PipelineDefinition {
   name: string;
+  repository?: string;
   on: PipelineTrigger[];
   stages: PipelineStage[];
 }

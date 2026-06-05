@@ -40,3 +40,12 @@ export function validateRunnerConfig(logger: Logger): void {
   logger.info("runner config validated");
 }
 
+export function getRunnerWorkspaceRoot(): string {
+  return optionalEnv("RUNNER_WORKSPACE_ROOT") || "/tmp/pipelineos-workspaces";
+}
+
+export function getRetainWorkspaceOnFailure(): boolean {
+  const val = optionalEnv("RUNNER_RETAIN_WORKSPACE_ON_FAILURE");
+  return val === "true" || val === "1";
+}
+

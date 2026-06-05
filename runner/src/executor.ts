@@ -7,6 +7,8 @@ import { PassThrough } from "node:stream";
 import { createDockerClient } from "./docker.js";
 import { parsePipelineYaml } from "./yamlParser.js";
 import { resolveStageOrder } from "./dependencyResolver.js";
+import { prepareWorkspace, cleanWorkspace } from "./workspace.js";
+import { getRetainWorkspaceOnFailure } from "./config.js";
 import type { PipelineDefinition, PipelineStage } from "./types.js";
 
 type ClaimedRun = { _id: string } & Record<string, unknown>;
@@ -329,6 +331,7 @@ async function runContainerWithStats(input: {
   stdout: PassThrough;
   stderr: PassThrough;
   logger: Logger;
+  workspacePath: string | null;
 }): Promise<{
   statusCode: number;
   cpuSeconds: number | null;
@@ -344,6 +347,14 @@ async function runContainerWithStats(input: {
     Env: Object.entries(input.env).map(([k, v]) => `${k}=${v}`),
     AttachStdout: true,
     AttachStderr: true,
+    ...(input.workspacePath
+      ? {
+          WorkingDir: "/workspace",
+          HostConfig: {
+            Binds: [`${input.workspacePath}:/workspace`],
+          },
+        }
+      : {}),
   });
 
   const stream = await container.attach({ stream: true, stdout: true, stderr: true });
@@ -481,7 +492,14 @@ async function ensureImage(docker: ReturnType<typeof createDockerClient>, image:
   });
 }
 
-async function runStage(logger: Logger, runId: string, stage: PipelineStage, rules: RemediationRule[], pipelineId: string | null): Promise<void> {
+async function runStage(
+  logger: Logger,
+  runId: string,
+  stage: PipelineStage,
+  rules: RemediationRule[],
+  pipelineId: string | null,
+  workspacePath: string | null,
+): Promise<void> {
   const stageName = stage.name;
   const image = stage.image;
   const command = `sh -lc ${JSON.stringify(stage.run)}`;
@@ -529,6 +547,7 @@ async function runStage(logger: Logger, runId: string, stage: PipelineStage, rul
       stdout,
       stderr,
       logger,
+      workspacePath,
     });
     const wallSeconds = Math.max(0, (Date.now() - wallStart) / 1000);
 
@@ -586,6 +605,7 @@ async function runPipeline(
   pipeline: PipelineDefinition,
   rules: RemediationRule[],
   pipelineId: string | null,
+  workspacePath: string | null,
 ): Promise<void> {
   const order = resolveStageOrder(pipeline.stages);
   const byName = new Map<string, PipelineStage>(pipeline.stages.map((s) => [s.name, s]));
@@ -601,7 +621,7 @@ async function runPipeline(
   for (const stageName of order) {
     const stage = byName.get(stageName);
     if (!stage) continue;
-    await runStage(logger, runId, stage, rules, pipelineId);
+    await runStage(logger, runId, stage, rules, pipelineId, workspacePath);
   }
 }
 
@@ -611,6 +631,9 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
 
   const runId = claimed._id;
   const runnerId = requiredEnv("RUNNER_ID");
+  
+  // Note: runId is the correlation key for background job execution and SSE log streams.
+  // requestId is strictly for API request correlation and should not be used as the job correlation key.
   const runLogger = logger.child({ runId, runnerId });
 
   const pipelineIdValue = (claimed as Record<string, unknown>).pipelineId;
@@ -618,6 +641,8 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   const commitShaValue = (claimed as Record<string, unknown>).commitSha;
   const commitSha = typeof commitShaValue === "string" ? commitShaValue : null;
   let heartbeatInterval: NodeJS.Timeout | null = null;
+  let workspacePath: string | null = null;
+  let success = false;
   try {
     // Keep the run "fresh" while we work, so the API can detect stale runners.
     heartbeatInterval = setInterval(() => {
@@ -626,6 +651,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
 
     let pipeline: PipelineDefinition = demoPipeline();
     if (pipelineId && commitSha) {
+      workspacePath = await prepareWorkspace(runId, pipelineId, commitSha, runLogger);
       const yaml = await fetchPipelineYaml(pipelineId, commitSha, runLogger);
       if (yaml) {
         pipeline = parsePipelineYaml(yaml);
@@ -634,14 +660,22 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
       }
     }
     const rules = pipelineId ? await fetchRemediationRules(pipelineId, runLogger) : [];
-    await runPipeline(runLogger, runId, pipeline, rules, pipelineId);
+    await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath);
     await setRunStatus(runId, "success");
+    success = true;
   } catch (err) {
     runLogger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
   } finally {
     if (heartbeatInterval !== null) {
       clearInterval(heartbeatInterval);
+    }
+    if (workspacePath) {
+      if (!success && getRetainWorkspaceOnFailure()) {
+        runLogger.info({ workspacePath }, "Retaining workspace on failure due to config");
+      } else {
+        await cleanWorkspace(runId, runLogger);
+      }
     }
   }
 }

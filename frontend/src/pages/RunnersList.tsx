@@ -10,6 +10,7 @@ interface RunnerRegistration {
   version?: string;
   hostname?: string;
   platform?: string;
+  isStale?: boolean;
 }
 
 export default function RunnersList(): ReactElement {
@@ -75,12 +76,10 @@ export default function RunnersList(): ReactElement {
               </tr>
             ) : (
               runners.map((r) => {
-                const now = new Date();
                 const heartbeat = new Date(r.lastHeartbeatAt);
-                const isStale = now.getTime() - heartbeat.getTime() > 30_000;
                 
-                // If it hasn't heartbeat in 30s, treat it as offline in the UI regardless of DB status.
-                const displayStatus = isStale ? "offline" : r.status;
+                // If the server marked it as stale, treat it as offline in the UI regardless of DB status.
+                const displayStatus = r.isStale ? "offline" : r.status;
 
                 return (
                   <tr key={r._id} className="hover:bg-slate-800/30 transition-colors">

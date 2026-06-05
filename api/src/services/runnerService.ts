@@ -3,6 +3,9 @@ import { Run } from "../models/Run.js";
 import { RunnerRegistration } from "../models/RunnerRegistration.js";
 import { flakinessService } from "../services/flakinessService.js";
 import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
+import { pino } from "pino";
+
+const runnerServiceLogger = pino({ name: "runnerService" });
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
 type StageStatus = "pending" | "running" | "success" | "failed" | "skipped";
@@ -112,6 +115,7 @@ export const runnerService = {
       ).exec();
     }
 
+    runnerServiceLogger.debug({ event: "run_heartbeat", runId, runnerId }, "Run heartbeat received");
     return updated !== null;
   },
 
@@ -124,8 +128,14 @@ export const runnerService = {
     ).exec();
   },
 
-  async listRunners(): Promise<Record<string, unknown>[]> {
-    return RunnerRegistration.find().sort({ lastHeartbeatAt: -1 }).lean<Record<string, unknown>>().exec();
+  async listRunners(): Promise<(Record<string, unknown> & { isStale: boolean })[]> {
+    const RUNNER_STALE_MS = 30_000; // 30 seconds
+    const runners = await RunnerRegistration.find().sort({ lastHeartbeatAt: -1 }).lean<Record<string, unknown>[]>().exec();
+    const now = Date.now();
+    return runners.map(r => {
+      const hb = r.lastHeartbeatAt instanceof Date ? r.lastHeartbeatAt.getTime() : 0;
+      return { ...r, isStale: now - hb > RUNNER_STALE_MS };
+    });
   },
 
   async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {

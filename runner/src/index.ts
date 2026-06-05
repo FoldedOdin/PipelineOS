@@ -20,6 +20,8 @@ function main(): void {
   validateRunnerConfig(logger);
   const intervalMs = 2000;
   logger.info({ intervalMs }, "runner scaffold started; polling loop reserved");
+  // MAX_CONCURRENT_RUNS is an optimization to control parallelism within this single runner instance.
+  // The actual distributed concurrency lock is maintained by MongoDB via claimNextQueuedRun's atomic findOneAndUpdate.
   const maxConcurrentRuns = Number(process.env.MAX_CONCURRENT_RUNS) || 1;
   const inFlightPromises = new Set<Promise<void>>();
   let shuttingDown = false;

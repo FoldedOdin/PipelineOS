@@ -4,7 +4,6 @@ import { pinoHttp } from "pino-http";
 import { corsMiddleware } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
-import type { RequestWithId } from "./middleware/requestId.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { healthRouter } from "./routes/health.js";
 import { remediationRouter } from "./routes/remediation.js";
@@ -20,6 +19,11 @@ type RequestWithRawBody = express.Request & { rawBody?: Buffer };
  * Builds the HTTP application with middleware and route modules.
  * Webhook and run routes are mounted in later implementation steps but are wired here for structure.
  */
+// MIDDLEWARE ORDERING:
+// 1. requestIdMiddleware MUST be first to generate req.requestId.
+// 2. pinoHttp reads req.requestId lazily via customProps.
+// 3. custom body parser
+// 4. routing middlewares
 export function createApp(logger: Logger): express.Express {
   const app = express();
   app.disable("x-powered-by");
@@ -27,7 +31,11 @@ export function createApp(logger: Logger): express.Express {
   app.use(
     pinoHttp({
       logger,
-      genReqId: (req) => (req as RequestWithId).requestId,
+      // Lazily evaluate requestId after requestIdMiddleware has attached it
+      customProps: (req) => ({ requestId: (req as any).requestId }),
+      // Don't generate id eagerly before middleware runs
+      genReqId: (req) => (req as any).requestId,
+      autoLogging: false,
     }),
   );
   app.use(corsMiddleware);

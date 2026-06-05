@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   return {
-    claimNextQueuedRun: vi.fn(() => Promise.resolve(null)),
+    claimNextQueuedRun: vi.fn(() => Promise.resolve<Record<string, unknown> | null>(null)),
     heartbeatRun: vi.fn(() => Promise.resolve(true)),
   };
 });
@@ -36,7 +36,7 @@ describe("stale run claiming route behavior", () => {
     const app = createApp(createSilentLogger());
     
     // claimNextQueuedRun returning null means no runs are available (even stale ones).
-    mocks.claimNextQueuedRun.mockResolvedValueOnce(null);
+    mocks.claimNextQueuedRun.mockResolvedValueOnce(null as any);
 
     await request(app)
       .post("/internal/runs/claim")
