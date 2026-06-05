@@ -89,7 +89,7 @@ export async function processGithubWebhookEvent(input: {
     durationMs: null,
   });
 
-  logger.info({ runId: String(run._id), pipelineId, event }, "queued run created from webhook");
+  logger.info({ runId: String(run._id), pipelineId, event, eventName: "webhook_received", deliveryId }, "queued run created from webhook");
 }
 
 export const webhookService = {

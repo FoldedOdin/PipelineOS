@@ -4,6 +4,7 @@ import { pinoHttp } from "pino-http";
 import { corsMiddleware } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
+import type { RequestWithId } from "./middleware/requestId.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { healthRouter } from "./routes/health.js";
 import { remediationRouter } from "./routes/remediation.js";
@@ -11,6 +12,7 @@ import { runnerRouter } from "./routes/runner.js";
 import { runsRouter } from "./routes/runs.js";
 import { seedRouter } from "./routes/seed.js";
 import { webhooksRouter } from "./routes/webhooks.js";
+import { runnersRouter } from "./routes/runners.js";
 
 type RequestWithRawBody = express.Request & { rawBody?: Buffer };
 
@@ -22,7 +24,12 @@ export function createApp(logger: Logger): express.Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(requestIdMiddleware);
-  app.use(pinoHttp({ logger }));
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId: (req) => (req as RequestWithId).requestId,
+    }),
+  );
   app.use(corsMiddleware);
   app.use(
     express.json({
@@ -39,6 +46,7 @@ export function createApp(logger: Logger): express.Express {
   app.use(analyticsRouter);
   app.use(remediationRouter);
   app.use(runsRouter);
+  app.use(runnersRouter);
   app.use(errorHandler);
   return app;
 }

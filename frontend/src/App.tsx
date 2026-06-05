@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import RemediationRules from "./pages/RemediationRules";
 import RunDetail from "./pages/RunDetail";
 import RunsList from "./pages/RunsList";
+import RunnersList from "./pages/RunnersList";
 
 export default function App(): ReactElement {
   return (
@@ -18,6 +19,9 @@ export default function App(): ReactElement {
           <nav className="flex gap-3 text-sm">
             <Link className="text-slate-300 hover:text-white" to="/runs">
               Runs
+            </Link>
+            <Link className="text-slate-300 hover:text-white" to="/runners">
+              Runners
             </Link>
             <Link className="text-slate-300 hover:text-white" to="/dashboard">
               Dashboard
@@ -34,6 +38,7 @@ export default function App(): ReactElement {
           <Route path="/runs" element={<RunsList />} />
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/runs/:id/logs" element={<LiveLogs />} />
+          <Route path="/runners" element={<RunnersList />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/rules" element={<RemediationRules />} />
         </Routes>

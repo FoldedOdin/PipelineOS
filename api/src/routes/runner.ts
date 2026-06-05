@@ -24,6 +24,7 @@ runnerRouter.post("/internal/runs/claim", async (req, res, next) => {
       res.status(204).send();
       return;
     }
+    req.log.info({ runId: String(run._id), runnerId, eventName: "run_claimed" }, "run claimed");
     res.status(200).json(run);
   } catch (err) {
     next(err);
@@ -37,6 +38,8 @@ runnerRouter.post("/internal/runs/:id/status", async (req, res, next) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    const bodyStatus = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).status : "unknown";
+    req.log.info({ runId: req.params.id, status: bodyStatus, eventName: "run_status_changed" }, "run status changed");
     res.status(200).json(updated);
   } catch (err) {
     next(err);
@@ -76,6 +79,8 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
       res.status(404).json({ error: "not_found" });
       return;
     }
+    const bodyStatus = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).status : "unknown";
+    req.log.info({ runId: req.params.id, stageName: req.params.stageName, status: bodyStatus, eventName: "stage_status_changed" }, "stage status changed");
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -103,6 +108,7 @@ runnerRouter.post("/internal/runs/:id/heartbeat", async (req, res, next) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    req.log.info({ runId: req.params.id, runnerId, eventName: "run_heartbeat" }, "run heartbeat");
     res.status(204).send();
   } catch (err) {
     next(err);

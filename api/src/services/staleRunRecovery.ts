@@ -45,7 +45,7 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
       }
 
       await run.save();
-      logger.warn({ runId: String(run._id) }, "marked stale run as failed");
+      logger.warn({ runId: String(run._id), eventName: "stale_run_recovered" }, "marked stale run as failed");
     }
   };
 

@@ -1,5 +1,6 @@
 import { isValidObjectId } from "mongoose";
 import { Run } from "../models/Run.js";
+import { RunnerRegistration } from "../models/RunnerRegistration.js";
 import { flakinessService } from "../services/flakinessService.js";
 import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
 
@@ -85,6 +86,12 @@ export const runnerService = {
       .lean<Record<string, unknown>>()
       .exec();
 
+    await RunnerRegistration.findOneAndUpdate(
+      { runnerId },
+      { $set: { runnerId, lastHeartbeatAt: now, status: "online" } },
+      { upsert: true }
+    ).exec();
+
     return doc;
   },
 
@@ -96,7 +103,29 @@ export const runnerService = {
       { _id: runId, status: "running", claimedBy: runnerId },
       { $set: { lastHeartbeatAt: now, claimExpiresAt: leaseUntil } },
     ).exec();
+
+    if (updated !== null) {
+      await RunnerRegistration.findOneAndUpdate(
+        { runnerId },
+        { $set: { runnerId, lastHeartbeatAt: now, status: "online" } },
+        { upsert: true }
+      ).exec();
+    }
+
     return updated !== null;
+  },
+
+  async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string }): Promise<void> {
+    const patch = info || {};
+    await RunnerRegistration.findOneAndUpdate(
+      { runnerId },
+      { $set: { runnerId, lastHeartbeatAt: new Date(), status: "online", ...patch } },
+      { upsert: true }
+    ).exec();
+  },
+
+  async listRunners(): Promise<Record<string, unknown>[]> {
+    return RunnerRegistration.find().sort({ lastHeartbeatAt: -1 }).lean<Record<string, unknown>>().exec();
   },
 
   async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {

@@ -20,22 +20,29 @@ function main(): void {
   validateRunnerConfig(logger);
   const intervalMs = 2000;
   logger.info({ intervalMs }, "runner scaffold started; polling loop reserved");
-  let inFlight = false;
-  let inFlightPromise: Promise<void> | null = null;
+  const maxConcurrentRuns = Number(process.env.MAX_CONCURRENT_RUNS) || 1;
+  const inFlightPromises = new Set<Promise<void>>();
   let shuttingDown = false;
 
   const intervalId = setInterval(() => {
     if (shuttingDown) return;
-    if (inFlight) return;
-    inFlight = true;
-    inFlightPromise = executeQueuedRun(logger)
+
+    // Send the runner idle heartbeat ping.
+    void import("./executor.js").then(({ pingRunnerHeartbeat }) => {
+      void pingRunnerHeartbeat(logger);
+    });
+
+    if (inFlightPromises.size >= maxConcurrentRuns) return;
+
+    const promise: Promise<void> = executeQueuedRun(logger)
       .catch((err: unknown) => {
         logger.error({ err }, "runner loop iteration failed");
       })
       .finally(() => {
-        inFlight = false;
-        inFlightPromise = null;
+        inFlightPromises.delete(promise);
       });
+    
+    inFlightPromises.add(promise);
     logger.debug("runner heartbeat");
   }, intervalMs);
 
@@ -51,7 +58,7 @@ function main(): void {
       process.exit(1);
     }, timeoutMs);
 
-    const wait = inFlightPromise ?? Promise.resolve();
+    const wait = Promise.allSettled(Array.from(inFlightPromises));
     wait
       .catch(() => undefined)
       .finally(() => {

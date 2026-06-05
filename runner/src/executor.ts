@@ -610,6 +610,9 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   if (claimed === null) return;
 
   const runId = claimed._id;
+  const runnerId = requiredEnv("RUNNER_ID");
+  const runLogger = logger.child({ runId, runnerId });
+
   const pipelineIdValue = (claimed as Record<string, unknown>).pipelineId;
   const pipelineId = typeof pipelineIdValue === "string" ? pipelineIdValue : null;
   const commitShaValue = (claimed as Record<string, unknown>).commitSha;
@@ -623,22 +626,39 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
 
     let pipeline: PipelineDefinition = demoPipeline();
     if (pipelineId && commitSha) {
-      const yaml = await fetchPipelineYaml(pipelineId, commitSha, logger);
+      const yaml = await fetchPipelineYaml(pipelineId, commitSha, runLogger);
       if (yaml) {
         pipeline = parsePipelineYaml(yaml);
       } else {
-        logger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
+        runLogger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
       }
     }
-    const rules = pipelineId ? await fetchRemediationRules(pipelineId, logger) : [];
-    await runPipeline(logger, runId, pipeline, rules, pipelineId);
+    const rules = pipelineId ? await fetchRemediationRules(pipelineId, runLogger) : [];
+    await runPipeline(runLogger, runId, pipeline, rules, pipelineId);
     await setRunStatus(runId, "success");
   } catch (err) {
-    logger.error({ err, runId }, "run execution failed");
+    runLogger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
   } finally {
     if (heartbeatInterval !== null) {
       clearInterval(heartbeatInterval);
     }
+  }
+}
+
+export async function pingRunnerHeartbeat(logger: Logger): Promise<void> {
+  try {
+    const os = await import("node:os");
+    const version = "0.1.0";
+    const hostname = os.hostname();
+    const platform = os.platform();
+    
+    await apiFetch("/internal/runners/heartbeat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version, hostname, platform })
+    });
+  } catch (err) {
+    logger.debug({ err }, "runner heartbeat ping failed");
   }
 }
