@@ -44,6 +44,7 @@ export default function Dashboard(): ReactElement {
   const [trend, setTrend] = useState<FailureTrendPoint[]>([]);
   const [stageCosts, setStageCosts] = useState<StageCostAggregate[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [health, setHealth] = useState<{ status: string; services: { mongo: string; api: string } } | undefined>(undefined);
 
   const load = useCallback(async (): Promise<void> => {
     if (pipelineId === "") {
@@ -57,12 +58,15 @@ export default function Dashboard(): ReactElement {
     setError(undefined);
     try {
       const encoded = encodeURIComponent(pipelineId);
-      const [flakinessRaw, heatRaw, trendRaw, costRaw] = await Promise.all([
+      const [flakinessRaw, heatRaw, trendRaw, costRaw, healthRaw] = await Promise.all([
         apiGetJson(`/api/analytics/flakiness?pipelineId=${encoded}`),
         apiGetJson(`/api/analytics/flakiness-heatmap?pipelineId=${encoded}&days=7`),
         apiGetJson(`/api/analytics/failure-trends?days=14`),
         apiGetJson(`/api/analytics/stage-costs?pipelineId=${encoded}&days=14&limit=10`),
+        apiGetJson(`/api/health`).catch(() => ({ status: "down", services: { mongo: "unknown", api: "down" } })),
       ]);
+      
+      setHealth(healthRaw as any);
 
       const scores: FlakinessScore[] = [];
       if (typeof flakinessRaw === "object" && flakinessRaw !== null) {
@@ -182,9 +186,25 @@ export default function Dashboard(): ReactElement {
           <h2 className="text-xl font-semibold text-white">Intelligence dashboard</h2>
           <p className="text-sm text-slate-400">Flakiness scores, heatmap (per stage × day), and run failure trends.</p>
         </div>
-        <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runs">
-          Runs
-        </Link>
+        <div className="flex items-center gap-4">
+          {health && (
+            <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-1.5 text-xs text-slate-300">
+              <span className="font-semibold text-slate-100">System Health:</span>
+              <span className={`flex items-center gap-1 ${health.services?.api === "up" ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${health.services?.api === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> API
+              </span>
+              <span className={`flex items-center gap-1 ${health.services?.mongo === "up" ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${health.services?.mongo === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> Mongo
+              </span>
+            </div>
+          )}
+          <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runners">
+            Runners
+          </Link>
+          <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runs">
+            Runs
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">

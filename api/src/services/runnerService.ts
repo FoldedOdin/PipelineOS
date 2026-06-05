@@ -119,7 +119,7 @@ export const runnerService = {
     return updated !== null;
   },
 
-  async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string }): Promise<void> {
+  async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string; activeRuns?: number; maxConcurrentRuns?: number }): Promise<void> {
     const patch = info || {};
     await RunnerRegistration.findOneAndUpdate(
       { runnerId },

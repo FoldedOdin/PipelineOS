@@ -14,6 +14,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/sdk-node": "^0.218.0",
     "bullmq": "5.56.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "16.4.5",

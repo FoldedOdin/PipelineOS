@@ -11,6 +11,8 @@ interface RunnerRegistration {
   hostname?: string;
   platform?: string;
   isStale?: boolean;
+  activeRuns?: number;
+  maxConcurrentRuns?: number;
 }
 
 export default function RunnersList(): ReactElement {
@@ -62,6 +64,7 @@ export default function RunnersList(): ReactElement {
             <tr>
               <th className="px-4 py-3">Runner ID</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Load</th>
               <th className="px-4 py-3">Last Heartbeat</th>
               <th className="px-4 py-3">Version</th>
               <th className="px-4 py-3">Host</th>
@@ -95,6 +98,23 @@ export default function RunnersList(): ReactElement {
                           <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                           Offline
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.maxConcurrentRuns ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-800">
+                            <div
+                              className="h-full bg-blue-500"
+                              style={{ width: `${Math.min(100, Math.max(0, ((r.activeRuns || 0) / r.maxConcurrentRuns) * 100))}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-400">
+                            {r.activeRuns || 0} / {r.maxConcurrentRuns}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">{heartbeat.toLocaleString()}</td>

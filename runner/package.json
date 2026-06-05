@@ -14,6 +14,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/sdk-node": "^0.218.0",
     "dockerode": "4.0.10",
     "dotenv": "16.4.5",
     "pino": "10.3.1",

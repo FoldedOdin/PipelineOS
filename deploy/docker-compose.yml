@@ -67,6 +67,12 @@ services:
       - ./frontend:/app
       - /app/node_modules
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
 volumes:
   mongo_data:
   pipeline_data:

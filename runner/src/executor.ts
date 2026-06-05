@@ -791,7 +791,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   }
 }
 
-export async function pingRunnerHeartbeat(logger: Logger): Promise<void> {
+export async function pingRunnerHeartbeat(logger: Logger, activeRuns: number, maxConcurrentRuns: number): Promise<void> {
   try {
     const os = await import("node:os");
     const version = "0.1.0";
@@ -801,7 +801,7 @@ export async function pingRunnerHeartbeat(logger: Logger): Promise<void> {
     await apiFetch("/internal/runners/heartbeat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version, hostname, platform })
+      body: JSON.stringify({ version, hostname, platform, activeRuns, maxConcurrentRuns })
     });
   } catch (err) {
     logger.debug({ err }, "runner heartbeat ping failed");

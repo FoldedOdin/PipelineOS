@@ -1,3 +1,4 @@
+import "./services/telemetry.js";
 import "dotenv/config";
 import http from "node:http";
 import { pino } from "pino";

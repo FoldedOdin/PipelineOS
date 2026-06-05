@@ -1,3 +1,4 @@
+import "./telemetry.js";
 import "dotenv/config";
 import { pino } from "pino";
 import type { Logger } from "pino";
@@ -31,7 +32,7 @@ function main(): void {
 
     // Send the runner idle heartbeat ping.
     void import("./executor.js").then(({ pingRunnerHeartbeat }) => {
-      void pingRunnerHeartbeat(logger);
+      void pingRunnerHeartbeat(logger, inFlightPromises.size, maxConcurrentRuns);
     });
 
     if (inFlightPromises.size >= maxConcurrentRuns) return;

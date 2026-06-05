@@ -7,6 +7,8 @@ export interface IRunnerRegistration extends Document {
   version?: string;
   hostname?: string;
   platform?: string;
+  activeRuns?: number;
+  maxConcurrentRuns?: number;
 }
 
 const RunnerRegistrationSchema = new Schema(
@@ -17,6 +19,8 @@ const RunnerRegistrationSchema = new Schema(
     version: { type: String },
     hostname: { type: String },
     platform: { type: String },
+    activeRuns: { type: Number },
+    maxConcurrentRuns: { type: Number },
   },
   { timestamps: true }
 );
