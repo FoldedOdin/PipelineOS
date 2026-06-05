@@ -4,6 +4,7 @@
  */
 import { isValidObjectId } from "mongoose";
 import { Run } from "../models/Run.js";
+import type { RunEvent } from "../models/Run.js";
 
 export type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
 
@@ -12,6 +13,17 @@ export interface RunsListResult {
   limit: number;
   total: number;
   items: Record<string, unknown>[];
+}
+
+export interface ReplayRunOptions {
+  triggeredBy?: string;
+}
+
+interface ReplaySourceRun {
+  pipelineId: string;
+  commitSha: string;
+  branch: string;
+  event: RunEvent;
 }
 
 function clampPositiveInt(value: number, fallback: number): number {
@@ -41,6 +53,35 @@ export const runService = {
   async getRunById(id: string): Promise<Record<string, unknown> | null> {
     if (!isValidObjectId(id)) return null;
     return await Run.findById(id).lean<Record<string, unknown>>().exec();
+  },
+
+  async replayRun(id: string, options: ReplayRunOptions = {}): Promise<Record<string, unknown> | null> {
+    if (!isValidObjectId(id)) return null;
+    const source = await Run.findById(id)
+      .select({ pipelineId: 1, commitSha: 1, branch: 1, event: 1 })
+      .lean<ReplaySourceRun>()
+      .exec();
+    if (source === null) return null;
+
+    const triggeredBy = typeof options.triggeredBy === "string" && options.triggeredBy.trim() !== "" ? options.triggeredBy.trim() : "replay";
+    const replay = new Run({
+      pipelineId: source.pipelineId,
+      commitSha: source.commitSha,
+      branch: source.branch,
+      triggeredBy,
+      event: source.event,
+      status: "queued",
+      stages: [],
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      lastHeartbeatAt: null,
+      claimedBy: null,
+      claimExpiresAt: null,
+    });
+    await replay.save();
+
+    return replay.toObject() as unknown as Record<string, unknown>;
   },
 
   async getStageLogs(runId: string, stageName: string): Promise<string | null> {

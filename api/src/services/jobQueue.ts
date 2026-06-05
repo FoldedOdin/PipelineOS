@@ -71,9 +71,10 @@ let worker: Worker<GithubWebhookJob> | undefined;
 
 export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<void> } {
   if (worker) {
+    const runningWorker = worker;
     return {
       stop: async () => {
-        await worker.close();
+        await runningWorker.close();
       },
     };
   }
@@ -107,9 +108,10 @@ export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<
   return {
     stop: async () => {
       const w = worker;
+      const q = queue;
       worker = undefined;
       await w?.close();
-      await queue.close();
+      await q?.close();
       queue = undefined;
     },
   };

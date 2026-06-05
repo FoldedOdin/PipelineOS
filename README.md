@@ -139,6 +139,7 @@ Your pipeline should appear within a few seconds.
 GET  /health
 GET  /api/runs
 GET  /api/runs/:id
+POST /api/runs/:id/replay
 GET  /api/runs/:id/stages/:stageName/logs
 GET  /api/runs/:id/stages/:stageName/diagnosis
 
@@ -168,6 +169,7 @@ for the full list with descriptions.
 | `INTERNAL_API_KEY` | Shared secret between runner and API |
 | `JWT_SECRET` | Secret for future dashboard auth |
 | `MONGODB_URI` | Set automatically in Docker Compose |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins allowed to call the API |
 
 **Optional — AI failure diagnosis:**
 
@@ -237,6 +239,7 @@ requeue any runs that have been `running` for more than 15 minutes.
 - [Pipeline YAML schema](docs/pipeline-schema.md)
 - [Architecture overview](docs/architecture.md)
 - [GitHub App setup](docs/github-app-setup.md) *(for fetching YAML at specific commit SHAs)*
+- [Product hardening roadmap](docs/product-hardening-roadmap.md)
 
 ---
 

@@ -16,3 +16,18 @@ export async function apiGetJson(path: string): Promise<unknown> {
   const body: unknown = await response.json();
   return body;
 }
+
+export async function apiPostJson(path: string, body: unknown): Promise<unknown> {
+  const url = `${apiBaseUrl()}${path}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const status = String(response.status);
+    const statusText = response.statusText;
+    throw new Error(`request failed: ${status} ${statusText}`);
+  }
+  return (await response.json()) as unknown;
+}

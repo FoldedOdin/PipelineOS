@@ -1,7 +1,9 @@
 import express from "express";
 import type { Logger } from "pino";
 import { pinoHttp } from "pino-http";
+import { corsMiddleware } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { requestIdMiddleware } from "./middleware/requestId.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { healthRouter } from "./routes/health.js";
 import { remediationRouter } from "./routes/remediation.js";
@@ -19,7 +21,9 @@ type RequestWithRawBody = express.Request & { rawBody?: Buffer };
 export function createApp(logger: Logger): express.Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use(requestIdMiddleware);
   app.use(pinoHttp({ logger }));
+  app.use(corsMiddleware);
   app.use(
     express.json({
       limit: "1mb",

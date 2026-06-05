@@ -1,10 +1,11 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import DiagnosisCard from "../components/DiagnosisCard";
 import LogViewer from "../components/LogViewer";
+import RunTimeline from "../components/RunTimeline";
 import StageRow from "../components/StageRow";
-import { apiGetJson } from "../api/client";
+import { apiGetJson, apiPostJson } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 
 type RunStatus = "queued" | "running" | "success" | "failed" | "cancelled";
@@ -101,8 +102,10 @@ function parseRun(payload: unknown): RunView | null {
  */
 export default function RunDetail(): ReactElement {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [payload, setPayload] = useState<unknown>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [replayStatus, setReplayStatus] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (id === undefined) {
@@ -141,6 +144,30 @@ export default function RunDetail(): ReactElement {
           <p className="text-sm text-slate-400">Run id: {id ?? "unknown"}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+            disabled={id === undefined || replayStatus === "Queueing replay…"}
+            onClick={() => {
+              if (id === undefined) return;
+              setReplayStatus("Queueing replay…");
+              void (async () => {
+                try {
+                  const raw = await apiPostJson(`/api/runs/${id}/replay`, { triggeredBy: "dashboard" });
+                  const nextId = typeof raw === "object" && raw !== null ? asString((raw as Record<string, unknown>)._id) : null;
+                  if (nextId === null) {
+                    setReplayStatus("Replay queued, but the response did not include a run id.");
+                    return;
+                  }
+                  navigate(`/runs/${nextId}`);
+                } catch (err) {
+                  setReplayStatus(err instanceof Error ? err.message : "Replay failed");
+                }
+              })();
+            }}
+          >
+            Replay
+          </button>
           <Link
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
             to={`/runs/${id ?? ""}/logs`}
@@ -158,6 +185,10 @@ export default function RunDetail(): ReactElement {
           <p className="font-medium">Could not load run</p>
           <p className="text-amber-200/80">{error}</p>
         </div>
+      ) : null}
+
+      {replayStatus !== undefined ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-300">{replayStatus}</div>
       ) : null}
 
       {payload !== undefined ? (
@@ -193,6 +224,13 @@ export default function RunDetail(): ReactElement {
               </div>
 
               <div className="space-y-3">
+                <RunTimeline
+                  stages={run.stages.map((stage) => ({
+                    name: stage.name,
+                    status: stage.status,
+                    durationLabel: stage.durationLabel,
+                  }))}
+                />
                 <h3 className="text-sm font-semibold text-slate-200">Stages</h3>
                 {run.stages.length === 0 ? (
                   <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">

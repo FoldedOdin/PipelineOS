@@ -19,7 +19,7 @@ export type LogStreamState =
   | { status: "closed"; reason: string }
   | { status: "error"; message: string };
 
-function parseEvent(raw: string): LogStreamEvent | null {
+export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
@@ -63,7 +63,7 @@ function parseEvent(raw: string): LogStreamEvent | null {
   }
 }
 
-function splitLinesPreservingRemainder(input: string): { lines: string[]; remainder: string } {
+export function splitLinesPreservingRemainder(input: string): { lines: string[]; remainder: string } {
   const normalized = input.replaceAll("\r\n", "\n");
   const parts = normalized.split("\n");
   if (parts.length <= 1) return { lines: [], remainder: normalized };
@@ -108,7 +108,7 @@ export function useLogStream(runId: string | undefined): {
 
     ws.onmessage = (event) => {
       const raw = typeof event.data === "string" ? event.data : "";
-      const parsed = parseEvent(raw);
+      const parsed = parseLogStreamEvent(raw);
       if (parsed === null) {
         linesRef.current = [...linesRef.current, { stageName: "stream", line: raw, timestamp: new Date().toISOString() }].slice(-maxLines);
         setState({ status: "open", lines: linesRef.current });
