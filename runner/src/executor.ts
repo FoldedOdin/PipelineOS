@@ -163,6 +163,24 @@ async function fetchRemediationRules(pipelineId: string, logger: Logger): Promis
   return rules;
 }
 
+async function fetchSecrets(logger: Logger): Promise<Record<string, string>> {
+  const res = await apiFetch(`/internal/secrets`, { method: "GET" });
+  if (!res.ok) {
+    logger.warn({ status: res.status, body: await res.text() }, "failed to fetch secrets");
+    return {};
+  }
+  const json: unknown = await res.json();
+  if (typeof json !== "object" || json === null) return {};
+  
+  const secrets: Record<string, string> = {};
+  for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+    if (typeof v === "string") {
+      secrets[k] = v;
+    }
+  }
+  return secrets;
+}
+
 async function fetchDiagnosis(runId: string, stageName: string): Promise<DiagnosisPayload | null> {
   const res = await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/diagnosis`, { method: "GET" });
   if (!res.ok) return null;
@@ -253,12 +271,80 @@ async function setRunStatus(runId: string, status: string): Promise<void> {
   });
 }
 
+import { execSync } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
+
 async function heartbeatRun(runId: string): Promise<void> {
   await apiFetch(`/internal/runs/${runId}/heartbeat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({}),
   });
+}
+
+async function uploadArtifacts(runId: string, stageName: string, artifacts: string[], workspacePath: string, logger: Logger) {
+  if (artifacts.length === 0) return;
+  try {
+    const tarPath = path.join("/tmp", `${runId}_${stageName}_artifacts.tar.gz`);
+    const paths = artifacts.map((p) => `"${p}"`).join(" ");
+    execSync(`tar -czf ${tarPath} -C ${workspacePath} ${paths}`, { stdio: "ignore" });
+    
+    const buf = await fs.readFile(tarPath);
+    const res = await apiFetch(`/internal/runs/${runId}/artifacts/${stageName}`, {
+      method: "POST",
+      headers: { "content-type": "application/gzip" },
+      body: buf,
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status, body: await res.text() }, "failed to upload artifacts");
+    }
+    await fs.unlink(tarPath).catch(() => {});
+  } catch (err) {
+    logger.warn({ err }, "failed to pack/upload artifacts");
+  }
+}
+
+async function uploadCache(key: string, paths: string[], workspacePath: string, logger: Logger) {
+  if (paths.length === 0) return;
+  try {
+    const tarPath = path.join("/tmp", `cache_${key}.tar.gz`);
+    const pStr = paths.map((p) => `"${p}"`).join(" ");
+    execSync(`tar -czf ${tarPath} -C ${workspacePath} ${pStr}`, { stdio: "ignore" });
+    
+    const buf = await fs.readFile(tarPath);
+    const res = await apiFetch(`/internal/cache/${key}`, {
+      method: "POST",
+      headers: { "content-type": "application/gzip" },
+      body: buf,
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status, body: await res.text() }, "failed to upload cache");
+    }
+    await fs.unlink(tarPath).catch(() => {});
+  } catch (err) {
+    logger.warn({ err }, "failed to pack/upload cache");
+  }
+}
+
+async function downloadCache(key: string, workspacePath: string, logger: Logger) {
+  try {
+    const res = await apiFetch(`/internal/cache/${key}`, { method: "GET" });
+    if (res.status === 404) return;
+    if (!res.ok) {
+      logger.warn({ status: res.status, body: await res.text() }, "failed to download cache");
+      return;
+    }
+    
+    const buf = await res.arrayBuffer();
+    const tarPath = path.join("/tmp", `dl_cache_${key}.tar.gz`);
+    await fs.writeFile(tarPath, Buffer.from(buf));
+    
+    execSync(`tar -xzf ${tarPath} -C ${workspacePath}`, { stdio: "ignore" });
+    await fs.unlink(tarPath).catch(() => {});
+  } catch (err) {
+    logger.warn({ err }, "failed to download/extract cache");
+  }
 }
 
 function ruleMatches(rule: RemediationRule, ctx: { pipelineId: string; stageName: string; diagnosis: DiagnosisPayload | null }): boolean {
@@ -499,6 +585,7 @@ async function runStage(
   rules: RemediationRule[],
   pipelineId: string | null,
   workspacePath: string | null,
+  secrets: Record<string, string>,
 ): Promise<void> {
   const stageName = stage.name;
   const image = stage.image;
@@ -512,11 +599,20 @@ async function runStage(
   const stdout = new PassThrough();
   const stderr = new PassThrough();
 
+  const secretValues = Object.values(secrets).filter((s) => s.length > 0);
+  const scrub = (text: string) => {
+    let scrubbed = text;
+    for (const val of secretValues) {
+      scrubbed = scrubbed.split(val).join("***");
+    }
+    return scrubbed;
+  };
+
   stdout.on("data", (chunk: Buffer) => {
-    void appendLogs(runId, stageName, chunk.toString("utf8"));
+    void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
   });
   stderr.on("data", (chunk: Buffer) => {
-    void appendLogs(runId, stageName, chunk.toString("utf8"));
+    void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
   });
 
   const cmd = ["sh", "-lc", stage.run];
@@ -537,13 +633,17 @@ async function runStage(
       // Count a "remediation attempt" only when we actually retry (attempt 2+).
       await recordRuleOutcome(retryRule.id, "attempt", logger);
     }
+    
+    if (attempt === 1 && workspacePath && stage.cache) {
+      await downloadCache(stage.cache.key, workspacePath, logger);
+    }
 
     const wallStart = Date.now();
     const result = await runContainerWithStats({
       docker,
       image,
       cmd,
-      env: stage.env,
+      env: { ...secrets, ...stage.env },
       stdout,
       stderr,
       logger,
@@ -570,6 +670,15 @@ async function runStage(
       await setStageStatus(runId, stageName, "success", 0);
       if (retryRule && attempt > 1) {
         await recordRuleOutcome(retryRule.id, "save", logger);
+      }
+      
+      if (workspacePath) {
+        if (stage.artifacts && stage.artifacts.length > 0) {
+          await uploadArtifacts(runId, stageName, stage.artifacts, workspacePath, logger);
+        }
+        if (stage.cache && stage.cache.paths.length > 0) {
+          await uploadCache(stage.cache.key, stage.cache.paths, workspacePath, logger);
+        }
       }
       return;
     }
@@ -606,6 +715,7 @@ async function runPipeline(
   rules: RemediationRule[],
   pipelineId: string | null,
   workspacePath: string | null,
+  secrets: Record<string, string>,
 ): Promise<void> {
   const order = resolveStageOrder(pipeline.stages);
   const byName = new Map<string, PipelineStage>(pipeline.stages.map((s) => [s.name, s]));
@@ -621,7 +731,7 @@ async function runPipeline(
   for (const stageName of order) {
     const stage = byName.get(stageName);
     if (!stage) continue;
-    await runStage(logger, runId, stage, rules, pipelineId, workspacePath);
+    await runStage(logger, runId, stage, rules, pipelineId, workspacePath, secrets);
   }
 }
 
@@ -660,7 +770,8 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
       }
     }
     const rules = pipelineId ? await fetchRemediationRules(pipelineId, runLogger) : [];
-    await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath);
+    const secrets = await fetchSecrets(runLogger);
+    await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath, secrets);
     await setRunStatus(runId, "success");
     success = true;
   } catch (err) {

@@ -7,6 +7,8 @@ export interface PipelineStage {
   depends_on: string[];
   env: Record<string, string>;
   timeout_minutes: number | null;
+  artifacts?: string[];
+  cache?: { key: string; paths: string[] };
 }
 
 export interface PipelineDefinition {

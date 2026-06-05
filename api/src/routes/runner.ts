@@ -4,10 +4,20 @@ import { Pipeline } from "../models/Pipeline.js";
 import { fetchPipelineYamlFromGithub, isGithubAppConfigured } from "../services/githubPipelineService.js";
 import { runnerService } from "../services/runnerService.js";
 import { diagnosisService } from "../services/diagnosisService.js";
+import { secretModel } from "../models/Secret.js";
 
 export const runnerRouter = Router();
 
 runnerRouter.use("/internal", requireInternalApiKey);
+
+runnerRouter.get("/internal/secrets", (req, res, next) => {
+  try {
+    const secrets = secretModel.getAllDecryptedSecrets();
+    res.status(200).json(secrets);
+  } catch (err) {
+    next(err);
+  }
+});
 
 function readRunnerId(req: { header: (name: string) => string | undefined }, logger: { warn: (o: unknown, msg: string) => void }): string {
   const raw = req.header("x-runner-id");

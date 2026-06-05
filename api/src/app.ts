@@ -12,6 +12,11 @@ import { runsRouter } from "./routes/runs.js";
 import { seedRouter } from "./routes/seed.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { runnersRouter } from "./routes/runners.js";
+import { authRouter } from "./routes/auth.js";
+import { secretsRouter } from "./routes/secrets.js";
+import { artifactsRouter } from "./routes/artifacts.js";
+import cookieParser from "cookie-parser";
+import { requireAuth } from "./middleware/auth.js";
 
 type RequestWithRawBody = express.Request & { rawBody?: Buffer };
 
@@ -39,6 +44,7 @@ export function createApp(logger: Logger): express.Express {
     }),
   );
   app.use(corsMiddleware);
+  app.use(cookieParser());
   app.use(
     express.json({
       limit: "1mb",
@@ -49,12 +55,22 @@ export function createApp(logger: Logger): express.Express {
   );
   app.use(healthRouter);
   app.use(webhooksRouter);
-  app.use(runnerRouter);
-  app.use(seedRouter);
+  app.use(runnerRouter); // internal endpoints
+  app.use(seedRouter); // seed endpoint
+  
+  app.use("/api/auth", authRouter);
+  
+  // Protect all other /api/* routes
+  app.use("/api", (req, res, next) => {
+    requireAuth(req, res, next);
+  });
+  
   app.use(analyticsRouter);
   app.use(remediationRouter);
   app.use(runsRouter);
   app.use(runnersRouter);
+  app.use(secretsRouter);
+  app.use(artifactsRouter);
   app.use(errorHandler);
   return app;
 }

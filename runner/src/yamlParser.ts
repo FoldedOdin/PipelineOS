@@ -77,7 +77,21 @@ export function parsePipelineYaml(raw: string): PipelineDefinition {
     const depends_on = readOptionalStringArray(stage.depends_on, `stages[${String(idx)}].depends_on`);
     const env = readOptionalEnv(stage.env, `stages[${String(idx)}].env`);
     const timeout_minutes = readOptionalInt(stage.timeout_minutes, `stages[${String(idx)}].timeout_minutes`);
-    return { name: stageName, image, run, depends_on, env, timeout_minutes };
+    
+    const artifacts = readOptionalStringArray(stage.artifacts, `stages[${String(idx)}].artifacts`);
+    
+    let cache: { key: string; paths: string[] } | undefined = undefined;
+    if (stage.cache !== undefined && stage.cache !== null) {
+      if (typeof stage.cache !== "object" || Array.isArray(stage.cache)) {
+        throw new Error(`invalid stages[${String(idx)}].cache: expected mapping`);
+      }
+      const c = stage.cache as Record<string, unknown>;
+      const key = requiredString(c.key, `stages[${String(idx)}].cache.key`);
+      const paths = readStringArray(c.paths, `stages[${String(idx)}].cache.paths`);
+      cache = { key, paths };
+    }
+
+    return { name: stageName, image, run, depends_on, env, timeout_minutes, artifacts, cache };
   });
 
   const nameSet = new Set<string>();

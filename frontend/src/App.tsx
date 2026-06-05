@@ -6,6 +6,7 @@ import RemediationRules from "./pages/RemediationRules";
 import RunDetail from "./pages/RunDetail";
 import RunsList from "./pages/RunsList";
 import RunnersList from "./pages/RunnersList";
+import Login from "./pages/Login";
 
 export default function App(): ReactElement {
   return (
@@ -16,25 +17,28 @@ export default function App(): ReactElement {
             <h1 className="text-lg font-semibold tracking-tight text-white">PipelineOS</h1>
             <p className="text-sm text-slate-400">Phase 2 — intelligence (flakiness, diagnosis, trends)</p>
           </div>
-          <nav className="flex gap-3 text-sm">
-            <Link className="text-slate-300 hover:text-white" to="/runs">
-              Runs
-            </Link>
-            <Link className="text-slate-300 hover:text-white" to="/runners">
-              Runners
-            </Link>
-            <Link className="text-slate-300 hover:text-white" to="/dashboard">
-              Dashboard
-            </Link>
-            <Link className="text-slate-300 hover:text-white" to="/rules">
-              Rules
-            </Link>
+          <nav className="flex items-center gap-4 text-sm">
+            <Link className="text-slate-300 hover:text-white" to="/runs">Runs</Link>
+            <Link className="text-slate-300 hover:text-white" to="/runners">Runners</Link>
+            <Link className="text-slate-300 hover:text-white" to="/dashboard">Dashboard</Link>
+            <Link className="text-slate-300 hover:text-white" to="/rules">Rules</Link>
+            <button
+              onClick={async () => {
+                const { logout } = await import("./api/auth");
+                await logout().catch(() => {});
+                window.location.href = "/login";
+              }}
+              className="ml-4 rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            >
+              Logout
+            </button>
           </nav>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">
         <Routes>
           <Route path="/" element={<Navigate to="/runs" replace />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/runs" element={<RunsList />} />
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/runs/:id/logs" element={<LiveLogs />} />

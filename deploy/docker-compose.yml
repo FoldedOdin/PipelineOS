@@ -39,6 +39,7 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules
+      - pipeline_data:/data
 
   runner:
     build:
@@ -68,3 +69,4 @@ services:
 
 volumes:
   mongo_data:
+  pipeline_data:

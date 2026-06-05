@@ -7,7 +7,11 @@ function apiBaseUrl(): string {
  */
 export async function apiGetJson(path: string): Promise<unknown> {
   const url = `${apiBaseUrl()}${path}`;
-  const response = await fetch(url);
+  const response = await fetch(url, { credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {}); // never resolve to stop execution
+  }
   if (!response.ok) {
     const status = String(response.status);
     const statusText = response.statusText;
@@ -23,7 +27,12 @@ export async function apiPostJson(path: string, body: unknown): Promise<unknown>
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    credentials: "include",
   });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {});
+  }
   if (!response.ok) {
     const status = String(response.status);
     const statusText = response.statusText;

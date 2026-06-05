@@ -12,7 +12,11 @@ function internalApiKey(): string {
 
 export async function internalGetJson(path: string): Promise<unknown> {
   const url = `${internalBaseUrl()}${path}`;
-  const response = await fetch(url, { headers: { "x-internal-api-key": internalApiKey() } });
+  const response = await fetch(url, { credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {});
+  }
   if (!response.ok) {
     throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);
   }
@@ -24,11 +28,15 @@ export async function internalPostJson(path: string, body: unknown): Promise<unk
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      "x-internal-api-key": internalApiKey(),
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    credentials: "include",
   });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {});
+  }
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`request failed: ${String(response.status)} ${response.statusText} ${text}`);
@@ -38,7 +46,11 @@ export async function internalPostJson(path: string, body: unknown): Promise<unk
 
 export async function internalDelete(path: string): Promise<void> {
   const url = `${internalBaseUrl()}${path}`;
-  const response = await fetch(url, { method: "DELETE", headers: { "x-internal-api-key": internalApiKey() } });
+  const response = await fetch(url, { method: "DELETE", credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {});
+  }
   if (!response.ok && response.status !== 204) {
     throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);
   }
