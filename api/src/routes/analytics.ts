@@ -3,7 +3,18 @@ import { analyticsService } from "../services/analyticsService.js";
 import { costService } from "../services/costService.js";
 import { flakinessService } from "../services/flakinessService.js";
 
+import { runService } from "../services/runService.js";
+
 export const analyticsRouter = Router();
+
+analyticsRouter.get("/api/analytics/pipelines", async (req, res, next) => {
+  try {
+    const pipelines = await runService.listPipelineIds();
+    res.status(200).json({ pipelines });
+  } catch (err) {
+    next(err);
+  }
+});
 
 analyticsRouter.get("/api/analytics/flakiness", async (req, res, next) => {
   try {

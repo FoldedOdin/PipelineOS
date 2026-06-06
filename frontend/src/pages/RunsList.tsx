@@ -147,8 +147,14 @@ export default function RunsList(): ReactElement {
                 if (parsed.items.length === 0) {
                   return (
                     <tr>
-                      <td className="px-4 py-6 text-slate-400" colSpan={7}>
-                        No runs yet. Push a commit to a repo with the webhook configured to create the first run.
+                      <td className="px-4 py-8 text-center text-slate-400" colSpan={7}>
+                        <div className="flex flex-col items-center gap-2">
+                          <p className="text-lg font-medium text-slate-300">No runs yet</p>
+                          <p className="max-w-md">
+                            Add a repository to PipelineOS by configuring a GitHub Webhook in your repository settings, 
+                            then push a commit to trigger your first run.
+                          </p>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -200,10 +206,6 @@ export default function RunsList(): ReactElement {
         </button>
       </div>
 
-      <p className="text-xs text-slate-500">
-        Tip: open a specific run at <Link className="text-blue-400 hover:underline" to="/runs/demo">/runs/demo</Link>{" "}
-        (placeholder id).
-      </p>
     </div>
   );
 }

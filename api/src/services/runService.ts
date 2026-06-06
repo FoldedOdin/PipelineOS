@@ -50,6 +50,10 @@ export const runService = {
     return { page, limit, total, items: docs };
   },
 
+  async listPipelineIds(): Promise<string[]> {
+    return await Run.distinct("pipelineId").exec();
+  },
+
   async getRunById(id: string): Promise<Record<string, unknown> | null> {
     if (!isValidObjectId(id)) return null;
     return await Run.findById(id).lean<Record<string, unknown>>().exec();

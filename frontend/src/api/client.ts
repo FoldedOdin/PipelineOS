@@ -40,3 +40,15 @@ export async function apiPostJson(path: string, body: unknown): Promise<unknown>
   }
   return (await response.json()) as unknown;
 }
+
+export async function apiDelete(path: string): Promise<void> {
+  const url = `${apiBaseUrl()}${path}`;
+  const response = await fetch(url, { method: "DELETE", credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return new Promise(() => {});
+  }
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);
+  }
+}

@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { internalDelete, internalGetJson, internalPostJson } from "../api/internalClient";
+import { apiDelete, apiGetJson, apiPostJson } from "../api/client";
 
 interface Rule {
   id: string;
@@ -87,12 +87,19 @@ export default function RemediationRules(): ReactElement {
   const [rules, setRules] = useState<Rule[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [creating, setCreating] = useState(false);
+  const [pipelineIds, setPipelines] = useState<string[]>([]);
+
+  useEffect(() => {
+    void apiGetJson("/api/analytics/pipelines")
+      .then((res: any) => setPipelines(res.pipelines || []))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async (): Promise<void> => {
     setError(undefined);
     try {
       const q = pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}` : "";
-      const raw = await internalGetJson(`/internal/remediation/rules${q}`);
+      const raw = await apiGetJson(`/api/remediation/rules${q}`);
       setRules(parseRules(raw));
     } catch (err) {
       setError(err instanceof Error ? err.message : "unknown error");
@@ -114,7 +121,7 @@ export default function RemediationRules(): ReactElement {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">Remediation rules</h2>
-          <p className="text-sm text-slate-400">Internal admin view (requires `VITE_INTERNAL_API_KEY`).</p>
+          <p className="text-sm text-slate-400">Manage automated retries and resolutions.</p>
         </div>
         <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/dashboard">
           Dashboard
@@ -128,8 +135,9 @@ export default function RemediationRules(): ReactElement {
         <div className="mt-2 flex flex-wrap gap-2">
           <input
             id="pipelineId"
+            list="pipelines-list"
             className="min-w-[260px] flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-            placeholder="owner/repo"
+            placeholder="e.g. owner/repo"
             defaultValue={pipelineId}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -138,6 +146,11 @@ export default function RemediationRules(): ReactElement {
               }
             }}
           />
+          <datalist id="pipelines-list">
+            {pipelineIds.map((id) => (
+              <option key={id} value={id} />
+            ))}
+          </datalist>
           <button
             type="button"
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
@@ -174,7 +187,7 @@ export default function RemediationRules(): ReactElement {
               setCreating(true);
               void (async () => {
                 try {
-                  await internalPostJson("/internal/remediation/rules", {
+                  await apiPostJson("/api/remediation/rules", {
                     name: `Retry network timeouts${pipelineId ? ` (${pipelineId})` : ""}`,
                     enabled: true,
                     match: { pipelineId: pipelineId || null, stageName: null, anyPatterns: ["network_or_timeout"], anyHintSubstrings: [] },
@@ -193,9 +206,7 @@ export default function RemediationRules(): ReactElement {
             Add example rule
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          This page is intentionally internal-only until user auth exists. Use a separate admin deployment if needed.
-        </p>
+          These rules automatically evaluate flaking tests and apply matching actions.
       </div>
 
       {rules === undefined ? (
@@ -240,7 +251,7 @@ export default function RemediationRules(): ReactElement {
                       onClick={() => {
                         void (async () => {
                           try {
-                            await internalDelete(`/internal/remediation/rules/${encodeURIComponent(r.id)}`);
+                            await apiDelete(`/api/remediation/rules/${encodeURIComponent(r.id)}`);
                             await load();
                           } catch (err) {
                             setError(err instanceof Error ? err.message : "unknown error");

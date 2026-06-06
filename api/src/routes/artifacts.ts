@@ -20,7 +20,7 @@ Promise.all([
 const internalRouter = Router();
 internalRouter.use(requireInternalApiKey);
 
-internalRouter.post("/internal/runs/:id/artifacts/:name", (req, res, next) => {
+internalRouter.post("/runs/:id/artifacts/:name", (req, res, next) => {
   const { id, name } = req.params;
   const filePath = path.join(ARTIFACTS_DIR, `${id}_${name}.tar.gz`);
   
@@ -36,7 +36,7 @@ internalRouter.post("/internal/runs/:id/artifacts/:name", (req, res, next) => {
   });
 });
 
-internalRouter.post("/internal/cache/:key", (req, res, next) => {
+internalRouter.post("/cache/:key", (req, res, next) => {
   const { key } = req.params;
   const filePath = path.join(CACHE_DIR, `${key}.tar.gz`);
   
@@ -52,7 +52,7 @@ internalRouter.post("/internal/cache/:key", (req, res, next) => {
   });
 });
 
-internalRouter.get("/internal/cache/:key", async (req, res, next) => {
+internalRouter.get("/cache/:key", async (req, res, next) => {
   try {
     const { key } = req.params;
     const filePath = path.join(CACHE_DIR, `${key}.tar.gz`);
@@ -71,7 +71,7 @@ internalRouter.get("/internal/cache/:key", async (req, res, next) => {
   }
 });
 
-artifactsRouter.use(internalRouter);
+artifactsRouter.use("/internal", internalRouter);
 
 // Public/UI routes to download artifacts (protected by requireAuth globally in app.ts)
 artifactsRouter.get("/api/runs/:id/artifacts/:name", async (req, res, next) => {

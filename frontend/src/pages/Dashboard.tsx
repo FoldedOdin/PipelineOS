@@ -45,6 +45,13 @@ export default function Dashboard(): ReactElement {
   const [stageCosts, setStageCosts] = useState<StageCostAggregate[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [health, setHealth] = useState<{ status: string; services: { mongo: string; api: string } } | undefined>(undefined);
+  const [pipelineIds, setPipelines] = useState<string[]>([]);
+
+  useEffect(() => {
+    void apiGetJson("/api/analytics/pipelines")
+      .then((res: any) => setPipelines(res.pipelines || []))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async (): Promise<void> => {
     if (pipelineId === "") {
@@ -63,7 +70,7 @@ export default function Dashboard(): ReactElement {
         apiGetJson(`/api/analytics/flakiness-heatmap?pipelineId=${encoded}&days=7`),
         apiGetJson(`/api/analytics/failure-trends?days=14`),
         apiGetJson(`/api/analytics/stage-costs?pipelineId=${encoded}&days=14&limit=10`),
-        apiGetJson(`/api/health`).catch(() => ({ status: "down", services: { mongo: "unknown", api: "down" } })),
+        apiGetJson(`/health`).catch(() => ({ status: "down", services: { mongo: "unknown", api: "down" } })),
       ]);
       
       setHealth(healthRaw as any);
@@ -214,8 +221,9 @@ export default function Dashboard(): ReactElement {
         <div className="mt-2 flex flex-wrap gap-2">
           <input
             id="pipelineId"
+            list="pipelines-list"
             className="min-w-[260px] flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-            placeholder="e.g. owner/repo/workflow.yml"
+            placeholder="e.g. owner/repo"
             defaultValue={pipelineId}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -224,6 +232,11 @@ export default function Dashboard(): ReactElement {
               }
             }}
           />
+          <datalist id="pipelines-list">
+            {pipelineIds.map((id) => (
+              <option key={id} value={id} />
+            ))}
+          </datalist>
           <button
             type="button"
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"

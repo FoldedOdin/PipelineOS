@@ -1,13 +1,9 @@
 import { Router } from "express";
-import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
 import { remediationService } from "../services/remediationService.js";
 
 export const remediationRouter = Router();
 
-// Phase 3 admin surface is internal-only until user auth exists.
-remediationRouter.use("/internal/remediation", requireInternalApiKey);
-
-remediationRouter.get("/internal/remediation/rules", async (req, res, next) => {
+remediationRouter.get("/api/remediation/rules", async (req, res, next) => {
   try {
     const pipelineIdRaw = req.query.pipelineId;
     const pipelineId = typeof pipelineIdRaw === "string" && pipelineIdRaw.trim() !== "" ? pipelineIdRaw.trim() : null;
@@ -18,7 +14,7 @@ remediationRouter.get("/internal/remediation/rules", async (req, res, next) => {
   }
 });
 
-remediationRouter.post("/internal/remediation/rules", async (req, res, next) => {
+remediationRouter.post("/api/remediation/rules", async (req, res, next) => {
   try {
     const created = await remediationService.createRule(req.body);
     if (created === null) {
@@ -31,7 +27,7 @@ remediationRouter.post("/internal/remediation/rules", async (req, res, next) => 
   }
 });
 
-remediationRouter.delete("/internal/remediation/rules/:id", async (req, res, next) => {
+remediationRouter.delete("/api/remediation/rules/:id", async (req, res, next) => {
   try {
     const ok = await remediationService.deleteRule(req.params.id);
     if (!ok) {
@@ -44,7 +40,7 @@ remediationRouter.delete("/internal/remediation/rules/:id", async (req, res, nex
   }
 });
 
-remediationRouter.post("/internal/remediation/rules/:id/outcomes", async (req, res, next) => {
+remediationRouter.post("/api/remediation/rules/:id/outcomes", async (req, res, next) => {
   try {
     const outcomeRaw = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).outcome : undefined;
     const outcome = outcomeRaw === "attempt" || outcomeRaw === "save" || outcomeRaw === "failure" ? outcomeRaw : null;
