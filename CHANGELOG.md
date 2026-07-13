@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-13
+
+### Fixed
+- Fixed missing runner internal remediation rules route (`GET /internal/remediation/rules` and `POST /internal/remediation/rules/:id/outcomes`).
+- Fixed global JWT authentication middleware (`requireAuth`) intercepting unit test routes and improved cookie token parsing.
+- Resolved all strict TypeScript compilation issues (`npm run build`) across `@pipeline-os/api`, `@pipeline-os/runner`, and `@pipeline-os/frontend`.
+- Resolved all ESLint warnings and errors (`npx eslint .`) across all packages (`api`, `runner`, `frontend`), achieving zero lint errors.
+
 ### Added
 
 - Redis service wiring (`REDIS_URL`) to support durable job queues.

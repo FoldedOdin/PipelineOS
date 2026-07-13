@@ -106,11 +106,11 @@ export default function RunnersList(): ReactElement {
                           <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-800">
                             <div
                               className="h-full bg-blue-500"
-                              style={{ width: `${Math.min(100, Math.max(0, ((r.activeRuns || 0) / r.maxConcurrentRuns) * 100))}%` }}
+                              style={{ width: `${String(Math.min(100, Math.max(0, ((r.activeRuns ?? 0) / r.maxConcurrentRuns) * 100)))}%` }}
                             />
                           </div>
                           <span className="text-xs text-slate-400">
-                            {r.activeRuns || 0} / {r.maxConcurrentRuns}
+                            {r.activeRuns ?? 0} / {r.maxConcurrentRuns}
                           </span>
                         </div>
                       ) : (

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { RequestHandler } from "express";
 
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {

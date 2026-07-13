@@ -91,8 +91,11 @@ export default function RemediationRules(): ReactElement {
 
   useEffect(() => {
     void apiGetJson("/api/analytics/pipelines")
-      .then((res: any) => setPipelines(res.pipelines || []))
-      .catch(() => {});
+      .then((res: unknown) => {
+        const obj = (res && typeof res === "object" ? res : {}) as { pipelines?: string[] };
+        setPipelines(obj.pipelines ?? []);
+      })
+      .catch(() => undefined);
   }, []);
 
   const load = useCallback(async (): Promise<void> => {

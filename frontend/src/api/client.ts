@@ -10,7 +10,7 @@ export async function apiGetJson(path: string): Promise<unknown> {
   const response = await fetch(url, { credentials: "include" });
   if (response.status === 401) {
     window.location.href = "/login";
-    return new Promise(() => {}); // never resolve to stop execution
+    return new Promise(() => undefined); // never resolve to stop execution
   }
   if (!response.ok) {
     const status = String(response.status);
@@ -31,7 +31,7 @@ export async function apiPostJson(path: string, body: unknown): Promise<unknown>
   });
   if (response.status === 401) {
     window.location.href = "/login";
-    return new Promise(() => {});
+    return new Promise(() => undefined);
   }
   if (!response.ok) {
     const status = String(response.status);
@@ -46,7 +46,7 @@ export async function apiDelete(path: string): Promise<void> {
   const response = await fetch(url, { method: "DELETE", credentials: "include" });
   if (response.status === 401) {
     window.location.href = "/login";
-    return new Promise(() => {});
+    return new Promise(() => undefined);
   }
   if (!response.ok && response.status !== 204) {
     throw new Error(`request failed: ${String(response.status)} ${response.statusText}`);

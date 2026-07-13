@@ -3,13 +3,14 @@ import { secretModel } from "../models/Secret.js";
 
 export const secretsRouter = Router();
 
-secretsRouter.get("/api/secrets", (req, res) => {
+secretsRouter.get("/api/secrets", (_req, res) => {
   const secrets = secretModel.listSecrets();
   res.json(secrets);
 });
 
 secretsRouter.post("/api/secrets", (req, res) => {
-  const { name, value } = req.body;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { name, value } = body;
   if (typeof name !== "string" || typeof value !== "string") {
     res.status(400).json({ error: "Name and value are required" });
     return;

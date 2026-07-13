@@ -120,7 +120,7 @@ export const runnerService = {
   },
 
   async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string; activeRuns?: number; maxConcurrentRuns?: number }): Promise<void> {
-    const patch = info || {};
+    const patch = info ?? {};
     await RunnerRegistration.findOneAndUpdate(
       { runnerId },
       { $set: { runnerId, lastHeartbeatAt: new Date(), status: "online", ...patch } },

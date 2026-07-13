@@ -10,7 +10,7 @@ export const runnerRouter = Router();
 
 runnerRouter.use("/internal", requireInternalApiKey);
 
-runnerRouter.get("/internal/secrets", (req, res, next) => {
+runnerRouter.get("/internal/secrets", (_req, res, next) => {
   try {
     const secrets = secretModel.getAllDecryptedSecrets();
     res.status(200).json(secrets);

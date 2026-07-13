@@ -7,7 +7,7 @@ import { runService } from "../services/runService.js";
 
 export const analyticsRouter = Router();
 
-analyticsRouter.get("/api/analytics/pipelines", async (req, res, next) => {
+analyticsRouter.get("/api/analytics/pipelines", async (_req, res, next) => {
   try {
     const pipelines = await runService.listPipelineIds();
     res.status(200).json({ pipelines });

@@ -41,7 +41,7 @@ export function validateRunnerConfig(logger: Logger): void {
 }
 
 export function getRunnerWorkspaceRoot(): string {
-  return optionalEnv("RUNNER_WORKSPACE_ROOT") || "/tmp/pipelineos-workspaces";
+  return optionalEnv("RUNNER_WORKSPACE_ROOT") ?? "/tmp/pipelineos-workspaces";
 }
 
 export function getRetainWorkspaceOnFailure(): boolean {

@@ -6,15 +6,15 @@ import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
 
 export const artifactsRouter = Router();
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
+const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
 const CACHE_DIR = path.join(DATA_DIR, "cache");
 
 // Ensure dirs exist
 Promise.all([
-  fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {}),
-  fs.mkdir(CACHE_DIR, { recursive: true }).catch(() => {}),
-]).catch(() => {});
+  fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => undefined),
+  fs.mkdir(CACHE_DIR, { recursive: true }).catch(() => undefined),
+]).catch(() => undefined);
 
 // Internal routes for Runner to upload/download
 const internalRouter = Router();

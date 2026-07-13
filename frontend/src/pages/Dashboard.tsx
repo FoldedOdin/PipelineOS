@@ -49,8 +49,11 @@ export default function Dashboard(): ReactElement {
 
   useEffect(() => {
     void apiGetJson("/api/analytics/pipelines")
-      .then((res: any) => setPipelines(res.pipelines || []))
-      .catch(() => {});
+      .then((res: unknown) => {
+        const obj = (res && typeof res === "object" ? res : {}) as { pipelines?: string[] };
+        setPipelines(obj.pipelines ?? []);
+      })
+      .catch(() => undefined);
   }, []);
 
   const load = useCallback(async (): Promise<void> => {
@@ -73,7 +76,7 @@ export default function Dashboard(): ReactElement {
         apiGetJson(`/health`).catch(() => ({ status: "down", services: { mongo: "unknown", api: "down" } })),
       ]);
       
-      setHealth(healthRaw as any);
+      setHealth(healthRaw as { status: string; services: { mongo: string; api: string } });
 
       const scores: FlakinessScore[] = [];
       if (typeof flakinessRaw === "object" && flakinessRaw !== null) {
@@ -197,11 +200,11 @@ export default function Dashboard(): ReactElement {
           {health && (
             <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-1.5 text-xs text-slate-300">
               <span className="font-semibold text-slate-100">System Health:</span>
-              <span className={`flex items-center gap-1 ${health.services?.api === "up" ? "text-emerald-400" : "text-rose-400"}`}>
-                <span className={`h-2 w-2 rounded-full ${health.services?.api === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> API
+              <span className={`flex items-center gap-1 ${health.services.api === "up" ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${health.services.api === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> API
               </span>
-              <span className={`flex items-center gap-1 ${health.services?.mongo === "up" ? "text-emerald-400" : "text-rose-400"}`}>
-                <span className={`h-2 w-2 rounded-full ${health.services?.mongo === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> Mongo
+              <span className={`flex items-center gap-1 ${health.services.mongo === "up" ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${health.services.mongo === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> Mongo
               </span>
             </div>
           )}

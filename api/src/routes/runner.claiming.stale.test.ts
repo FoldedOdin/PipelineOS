@@ -36,7 +36,7 @@ describe("stale run claiming route behavior", () => {
     const app = createApp(createSilentLogger());
     
     // claimNextQueuedRun returning null means no runs are available (even stale ones).
-    mocks.claimNextQueuedRun.mockResolvedValueOnce(null as any);
+    mocks.claimNextQueuedRun.mockResolvedValueOnce(null);
 
     await request(app)
       .post("/internal/runs/claim")

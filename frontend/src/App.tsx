@@ -23,10 +23,12 @@ export default function App(): ReactElement {
             <Link className="text-slate-300 hover:text-white" to="/dashboard">Dashboard</Link>
             <Link className="text-slate-300 hover:text-white" to="/rules">Rules</Link>
             <button
-              onClick={async () => {
-                const { logout } = await import("./api/auth");
-                await logout().catch(() => {});
-                window.location.href = "/login";
+              onClick={() => {
+                void (async () => {
+                  const { logout } = await import("./api/auth");
+                  await logout().catch(() => undefined);
+                  window.location.href = "/login";
+                })();
               }}
               className="ml-4 rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
             >

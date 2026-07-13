@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { rm, mkdir } from "node:fs/promises";
-import { join, normalize, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { Logger } from "pino";
 import { getRunnerWorkspaceRoot } from "./config.js";
 

@@ -299,7 +299,7 @@ async function uploadArtifacts(runId: string, stageName: string, artifacts: stri
     if (!res.ok) {
       logger.warn({ status: res.status, body: await res.text() }, "failed to upload artifacts");
     }
-    await fs.unlink(tarPath).catch(() => {});
+    await fs.unlink(tarPath).catch(() => undefined);
   } catch (err) {
     logger.warn({ err }, "failed to pack/upload artifacts");
   }
@@ -321,7 +321,7 @@ async function uploadCache(key: string, paths: string[], workspacePath: string, 
     if (!res.ok) {
       logger.warn({ status: res.status, body: await res.text() }, "failed to upload cache");
     }
-    await fs.unlink(tarPath).catch(() => {});
+    await fs.unlink(tarPath).catch(() => undefined);
   } catch (err) {
     logger.warn({ err }, "failed to pack/upload cache");
   }
@@ -341,7 +341,7 @@ async function downloadCache(key: string, workspacePath: string, logger: Logger)
     await fs.writeFile(tarPath, Buffer.from(buf));
     
     execSync(`tar -xzf ${tarPath} -C ${workspacePath}`, { stdio: "ignore" });
-    await fs.unlink(tarPath).catch(() => {});
+    await fs.unlink(tarPath).catch(() => undefined);
   } catch (err) {
     logger.warn({ err }, "failed to download/extract cache");
   }

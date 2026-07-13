@@ -5,7 +5,7 @@ const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.SECRETS_ENCRYPTION_KEY || "0123456789abcdef0123456789abcdef"; // 32 chars fallback
+  const secret = process.env.SECRETS_ENCRYPTION_KEY ?? "0123456789abcdef0123456789abcdef"; // 32 chars fallback
   if (secret.length !== 32) {
     throw new Error("SECRETS_ENCRYPTION_KEY must be exactly 32 characters for AES-256");
   }
@@ -32,6 +32,9 @@ export function decryptSecret(ciphertext: string): string {
   const [ivBase64, authTagBase64, encryptedBase64] = parts;
   const iv = Buffer.from(ivBase64, "base64");
   const authTag = Buffer.from(authTagBase64, "base64");
+  if (authTag.length !== AUTH_TAG_LENGTH) {
+    throw new Error("Invalid auth tag length");
+  }
 
   const decipher = crypto.createDecipheriv(ALGORITHM, getEncryptionKey(), iv);
   decipher.setAuthTag(authTag);

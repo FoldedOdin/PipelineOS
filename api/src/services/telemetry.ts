@@ -4,7 +4,7 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://jaeger:4318/v1/traces",
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "http://jaeger:4318/v1/traces",
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
@@ -12,5 +12,11 @@ const sdk = new NodeSDK({
 sdk.start();
 
 process.on("SIGTERM", () => {
-  sdk.shutdown().then(() => console.log("OTel terminated")).catch((err) => console.log("OTel error", err));
+  void sdk.shutdown()
+    .then(() => {
+      console.log("OTel terminated");
+    })
+    .catch((err: unknown) => {
+      console.log("OTel error", err);
+    });
 });

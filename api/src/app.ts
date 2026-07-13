@@ -37,9 +37,9 @@ export function createApp(logger: Logger): express.Express {
     pinoHttp({
       logger,
       // Lazily evaluate requestId after requestIdMiddleware has attached it
-      customProps: (req) => ({ requestId: (req as any).requestId }),
+      customProps: (req) => ({ requestId: (req as unknown as { requestId?: string }).requestId ?? "unknown" }),
       // Don't generate id eagerly before middleware runs
-      genReqId: (req) => (req as any).requestId,
+      genReqId: (req) => (req as unknown as { requestId?: string }).requestId ?? "unknown",
       autoLogging: false,
     }),
   );
