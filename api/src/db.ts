@@ -1,19 +1,11 @@
-import mongoose from "mongoose";
 import type { Logger } from "pino";
-import "./models/Pipeline.js";
-import "./models/RemediationRule.js";
-import "./models/Run.js";
+import { container } from "./bootstrap/index.js";
 
 /**
- * Establishes a single Mongoose connection using `MONGODB_URI`.
- * Fails fast if the URI is missing so misconfiguration is obvious at startup.
+ * Establishes database connection and runs any necessary migrations
+ * using the configured persistence adapter (SQLite or MongoDB).
  */
 export async function connectDb(logger: Logger): Promise<void> {
-  const uri = process.env.MONGODB_URI;
-  if (uri === undefined || uri === "") {
-    throw new Error("MONGODB_URI is required");
-  }
-  mongoose.set("strictQuery", true);
-  await mongoose.connect(uri);
-  logger.info("connected to MongoDB");
+  await container.persistence.connect(logger);
+  await container.persistence.migrate();
 }

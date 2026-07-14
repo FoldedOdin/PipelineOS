@@ -12,7 +12,9 @@ export interface IApplication {
 
 export async function createApplication(logger: Logger): Promise<IApplication> {
   await container.persistence.connect(logger);
+  await container.persistence.migrate();
   const app = createApp(logger);
+
   return {
     app,
     container,

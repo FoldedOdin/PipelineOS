@@ -8,6 +8,7 @@ import type {
 import {
   EnvConfigAdapter,
   MongoPersistenceAdapter,
+  SqlitePersistenceAdapter,
   LocalStorageAdapter,
   LocalLogStorageAdapter,
   MemorySecretsAdapter,
@@ -30,7 +31,12 @@ class ApplicationContainer implements IApplicationContainer {
 
   constructor() {
     this.config = new EnvConfigAdapter();
-    this.persistence = new MongoPersistenceAdapter();
+    const provider = this.config.getDatabaseProvider();
+    if (provider === "mongodb") {
+      this.persistence = new MongoPersistenceAdapter();
+    } else {
+      this.persistence = new SqlitePersistenceAdapter(this.config);
+    }
     this.storage = new LocalStorageAdapter(this.config.getStorageDirectory());
     this.logStorage = new LocalLogStorageAdapter(this.config.getLogsDirectory());
     this.secrets = new MemorySecretsAdapter();
@@ -38,3 +44,4 @@ class ApplicationContainer implements IApplicationContainer {
 }
 
 export const container: IApplicationContainer = new ApplicationContainer();
+
