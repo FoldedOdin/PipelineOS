@@ -35,8 +35,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./api:/app
-      - /app/node_modules
+      - ./api:/app:z
       - pipeline_data:/data
 
   runner:
@@ -49,8 +48,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/pipelineos-workspaces:/tmp/pipelineos-workspaces
-      - ./runner:/app
-      - /app/node_modules
+      - ./runner:/app:z
 
   frontend:
     build:
@@ -62,8 +60,7 @@ services:
     depends_on:
       - api
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend:/app:z
 
   jaeger:
     image: jaegertracing/all-in-one:latest
