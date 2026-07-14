@@ -4,8 +4,8 @@ import { container } from "../bootstrap/index.js";
 export const healthRouter = Router();
 
 healthRouter.get("/health", async (_req, res) => {
-  const isHealthy = await container.persistence.healthCheck();
-  const dbStatus = isHealthy ? "up" : "down";
+  const dbHealth = await container.persistence.healthCheck();
+  const dbStatus = dbHealth.connected ? "up" : "down";
 
   res.status(200).json({
     status: "ok",
@@ -14,6 +14,7 @@ healthRouter.get("/health", async (_req, res) => {
     memoryUsage: process.memoryUsage(),
     services: {
       mongo: dbStatus,
+      database: dbHealth,
       api: "up"
     }
   });

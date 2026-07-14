@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import type {
   IPersistenceAdapter,
+  PersistenceCapabilities,
+  DatabaseHealthInfo,
   IRunRepository,
   IStageRepository,
   IPipelineRepository,
@@ -29,6 +31,13 @@ import "../../../../models/WebhookDelivery.js";
 import "../../../../models/Artifact.js";
 
 export class MongoPersistenceAdapter implements IPersistenceAdapter {
+  readonly capabilities: PersistenceCapabilities = {
+    supportsTransactions: false,
+    supportsJson: true,
+    supportsFullTextSearch: false,
+    supportsConcurrentLocks: false,
+  };
+
   readonly runRepository: IRunRepository = new MongoRunRepository();
   readonly stageRepository: IStageRepository = new MongoStageRepository();
   readonly pipelineRepository: IPipelineRepository = new MongoPipelineRepository();
@@ -54,15 +63,33 @@ export class MongoPersistenceAdapter implements IPersistenceAdapter {
     await mongoose.disconnect();
   }
 
-  async healthCheck(): Promise<boolean> {
+  async migrate(): Promise<void> {
+    // MongoDB schemas are applied dynamically via Mongoose models or index creation if needed
+  }
+
+  async healthCheck(): Promise<DatabaseHealthInfo> {
+    const dbName = mongoose.connection.name || "pipelineos";
     try {
       if ((mongoose.connection.readyState as unknown as number) === 1) {
         await mongoose.connection.db?.command({ ping: 1 });
-        return true;
+        return {
+          connected: true,
+          provider: "mongodb",
+          database: dbName,
+        };
       }
-      return false;
-    } catch {
-      return false;
+      return {
+        connected: false,
+        provider: "mongodb",
+        database: dbName,
+      };
+    } catch (err) {
+      return {
+        connected: false,
+        provider: "mongodb",
+        database: dbName,
+        details: { error: err instanceof Error ? err.message : String(err) },
+      };
     }
   }
 }

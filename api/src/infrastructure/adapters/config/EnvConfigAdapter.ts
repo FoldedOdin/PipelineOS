@@ -1,11 +1,18 @@
 import path from "node:path";
-import type { IConfigAdapter } from "../../../domain/index.js";
+import type { IConfigAdapter, StorageCategory } from "../../../domain/index.js";
 
 export class EnvConfigAdapter implements IConfigAdapter {
+  getDatabaseProvider(): "sqlite" | "mongodb" | "postgresql" {
+    const provider = (process.env.DATABASE_PROVIDER ?? process.env.DATABASE_TYPE)?.toLowerCase();
+    if (provider === "mongodb") return "mongodb";
+    if (provider === "postgresql" || provider === "postgres") return "postgresql";
+    return "sqlite";
+  }
+
   getDatabaseType(): "mongodb" | "sqlite" | "postgres" {
-    const type = process.env.DATABASE_TYPE?.toLowerCase();
-    if (type === "sqlite" || type === "postgres") return type;
-    return "mongodb";
+    const provider = this.getDatabaseProvider();
+    if (provider === "postgresql") return "postgres";
+    return provider;
   }
 
   getStorageType(): "local" | "s3" | "minio" {
@@ -24,12 +31,20 @@ export class EnvConfigAdapter implements IConfigAdapter {
     return process.env.DATA_DIR ?? "/var/lib/pipelineos/data";
   }
 
+  getStoragePath(category: StorageCategory): string {
+    return path.join(this.getDataDirectory(), category);
+  }
+
+  getSqlitePath(): string {
+    return process.env.SQLITE_PATH ?? path.join(this.getStoragePath("database"), "pipelineos.db");
+  }
+
   getStorageDirectory(): string {
-    return process.env.STORAGE_DIR ?? path.join(this.getDataDirectory(), "storage");
+    return process.env.STORAGE_DIR ?? this.getStoragePath("artifacts");
   }
 
   getLogsDirectory(): string {
-    return process.env.LOGS_DIR ?? path.join(this.getDataDirectory(), "logs");
+    return process.env.LOGS_DIR ?? this.getStoragePath("logs");
   }
 
   getMongoUri(): string {

@@ -7,7 +7,25 @@ import type { IStageFlakinessRepository } from "./IStageFlakinessRepository.js";
 import type { IWebhookDeliveryRepository } from "./IWebhookDeliveryRepository.js";
 import type { IArtifactRepository } from "./IArtifactRepository.js";
 
+export interface PersistenceCapabilities {
+  readonly supportsTransactions: boolean;
+  readonly supportsJson: boolean;
+  readonly supportsFullTextSearch: boolean;
+  readonly supportsConcurrentLocks: boolean;
+}
+
+export interface DatabaseHealthInfo {
+  readonly connected: boolean;
+  readonly provider: "sqlite" | "mongodb" | "postgresql";
+  readonly database: string;
+  readonly version?: string;
+  readonly migrationVersion?: number;
+  readonly wal?: boolean;
+  readonly details?: Record<string, unknown>;
+}
+
 export interface IPersistenceAdapter {
+  readonly capabilities: PersistenceCapabilities;
   readonly runRepository: IRunRepository;
   readonly stageRepository: IStageRepository;
   readonly pipelineRepository: IPipelineRepository;
@@ -19,5 +37,6 @@ export interface IPersistenceAdapter {
 
   connect(logger?: unknown): Promise<void>;
   disconnect(): Promise<void>;
-  healthCheck(): Promise<boolean>;
+  migrate(): Promise<void>;
+  healthCheck(): Promise<DatabaseHealthInfo>;
 }
