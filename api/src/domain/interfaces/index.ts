@@ -7,7 +7,9 @@ export * from "./database/IRunnerRegistrationRepository.js";
 export * from "./database/IStageFlakinessRepository.js";
 export * from "./database/IWebhookDeliveryRepository.js";
 export * from "./database/IArtifactRepository.js";
+export * from "./database/IBackupAdapter.js";
 export * from "./storage/IStorageAdapter.js";
+
 export * from "./storage/ILogStorageAdapter.js";
 export * from "./secrets/ISecretsAdapter.js";
 export * from "./config/IConfigAdapter.js";

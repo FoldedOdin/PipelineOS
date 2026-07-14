@@ -84,6 +84,11 @@ export function describeRepositoryContract(
             status: "pending",
             image: "node:18",
             command: "npm run build",
+            exitCode: null,
+            startedAt: null,
+            finishedAt: null,
+            durationMs: null,
+            logs: "",
             metrics: {
               cpuSeconds: null,
               cpuPercentAvg: null,
@@ -93,6 +98,7 @@ export function describeRepositoryContract(
             },
           },
         ],
+
       });
 
       const updated = await stageRepo.updateStatus(run.id, "build", {

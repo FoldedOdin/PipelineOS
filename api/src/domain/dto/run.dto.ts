@@ -31,6 +31,7 @@ export interface RunDTO {
 }
 
 export interface CreateRunInput {
+  id?: string;
   pipelineId: string;
   commitSha: string;
   branch: string;
@@ -39,6 +40,7 @@ export interface CreateRunInput {
   status?: RunStatus;
   stages?: StageDTO[];
 }
+
 
 export interface UpdateRunInput {
   status?: RunStatus;

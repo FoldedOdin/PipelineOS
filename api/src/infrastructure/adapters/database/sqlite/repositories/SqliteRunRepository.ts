@@ -6,8 +6,8 @@ import type {
   UpdateRunInput,
   RemediationAttemptDTO,
   StageCostAggregateDTO,
-  StageDTO,
 } from "../../../../../domain/index.js";
+
 import { SqliteRunMapper, type SqliteRunRow, SqliteStageMapper, type SqliteStageRow } from "../mappers/index.js";
 
 export class SqliteRunRepository implements IRunRepository {
