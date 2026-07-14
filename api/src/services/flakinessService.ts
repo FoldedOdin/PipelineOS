@@ -1,5 +1,4 @@
-import mongoose, { type Types } from "mongoose";
-import { StageFlakinessRecord } from "../models/StageFlakinessRecord.js";
+import { container } from "../bootstrap/index.js";
 
 export const MAX_OUTCOMES_PER_STAGE = 50;
 
@@ -25,41 +24,23 @@ export const flakinessService = {
   async recordOutcome(input: {
     pipelineId: string;
     stageName: string;
-    runId: Types.ObjectId | string;
+    runId: unknown;
     success: boolean;
   }): Promise<void> {
-    const runId =
-      typeof input.runId === "string"
-        ? new mongoose.Types.ObjectId(input.runId)
-        : input.runId;
+    const runIdStr = typeof input.runId === "string" ? input.runId : String(input.runId);
     const at = new Date();
 
-    await StageFlakinessRecord.findOneAndUpdate(
-      { pipelineId: input.pipelineId, stageName: input.stageName },
-      {
-        $push: {
-          outcomes: {
-            $each: [{ runId, success: input.success, at }],
-            $slice: -MAX_OUTCOMES_PER_STAGE,
-          },
-        },
-      },
-      { upsert: true, new: true },
-    ).exec();
+    await container.persistence.stageFlakinessRepository.recordStageOutcome({
+      pipelineId: input.pipelineId,
+      stageName: input.stageName,
+      runId: runIdStr,
+      success: input.success,
+      at,
+    });
   },
 
   async listScoresForPipeline(pipelineId: string): Promise<StageFlakinessScore[]> {
-    const docs = await StageFlakinessRecord.find({ pipelineId })
-      .sort({ stageName: 1 })
-      .lean<
-        {
-          pipelineId: string;
-          stageName: string;
-          outcomes: { success: boolean }[];
-          updatedAt?: Date;
-        }[]
-      >()
-      .exec();
+    const docs = await container.persistence.stageFlakinessRepository.findByPipeline(pipelineId);
 
     return docs.map((d) => {
       const passes = d.outcomes.filter((o) => o.success).length;
@@ -96,15 +77,7 @@ export const flakinessService = {
       dayKeys.push(key);
     }
 
-    const docs = await StageFlakinessRecord.find({ pipelineId })
-      .sort({ stageName: 1 })
-      .lean<
-        {
-          stageName: string;
-          outcomes: { success: boolean; at: Date }[];
-        }[]
-      >()
-      .exec();
+    const docs = await container.persistence.stageFlakinessRepository.findByPipeline(pipelineId);
 
     const stages = docs.map((doc) => {
       const cells: (number | null)[] = dayKeys.map((dayKey) => {

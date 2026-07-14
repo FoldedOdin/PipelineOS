@@ -1,18 +1,11 @@
 import { Router } from "express";
-import mongoose from "mongoose";
+import { container } from "../bootstrap/index.js";
 
 export const healthRouter = Router();
 
 healthRouter.get("/health", async (_req, res) => {
-  let mongoStatus = "down";
-  try {
-    if ((mongoose.connection.readyState as unknown as number) === 1) {
-      await mongoose.connection.db?.command({ ping: 1 });
-      mongoStatus = "up";
-    }
-  } catch {
-    mongoStatus = "down";
-  }
+  const isHealthy = await container.persistence.healthCheck();
+  const dbStatus = isHealthy ? "up" : "down";
 
   res.status(200).json({
     status: "ok",
@@ -20,7 +13,7 @@ healthRouter.get("/health", async (_req, res) => {
     uptime: process.uptime(),
     memoryUsage: process.memoryUsage(),
     services: {
-      mongo: mongoStatus,
+      mongo: dbStatus,
       api: "up"
     }
   });

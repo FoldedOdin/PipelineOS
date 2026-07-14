@@ -1,4 +1,4 @@
-import { Run } from "../models/Run.js";
+import { container } from "../bootstrap/index.js";
 
 export interface FailureTrendPoint {
   day: string;
@@ -15,13 +15,10 @@ export const analyticsService = {
     const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - (dayCount - 1)));
     start.setUTCHours(0, 0, 0, 0);
 
-    const runs = await Run.find({
-      createdAt: { $gte: start, $lte: end },
-      status: { $in: ["success", "failed", "cancelled"] },
-    })
-      .select({ createdAt: 1, status: 1 })
-      .lean<{ createdAt?: Date; status?: string }[]>()
-      .exec();
+    const runs = await container.persistence.runRepository.findRecent({
+      limit: 100_000,
+      since: start.toISOString(),
+    });
 
     const buckets = new Map<string, { total: number; failed: number; success: number }>();
     for (let i = 0; i < dayCount; i += 1) {
@@ -31,8 +28,10 @@ export const analyticsService = {
     }
 
     for (const r of runs) {
-      const created = r.createdAt instanceof Date ? r.createdAt : null;
-      if (created === null) continue;
+      const created = r.createdAt;
+      if (!(created instanceof Date) || created > end) continue;
+      if (r.status !== "success" && r.status !== "failed" && r.status !== "cancelled") continue;
+
       const key = created.toISOString().slice(0, 10);
       const b = buckets.get(key);
       if (b === undefined) continue;

@@ -1,19 +1,30 @@
 import { Router } from "express";
 import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
-import { Pipeline } from "../models/Pipeline.js";
 import { fetchPipelineYamlFromGithub, isGithubAppConfigured } from "../services/githubPipelineService.js";
 import { runnerService } from "../services/runnerService.js";
 import { diagnosisService } from "../services/diagnosisService.js";
-import { secretModel } from "../models/Secret.js";
+import { container } from "../bootstrap/index.js";
+import { decryptSecret } from "../services/cryptoService.js";
 
 export const runnerRouter = Router();
 
 runnerRouter.use("/internal", requireInternalApiKey);
 
-runnerRouter.get("/internal/secrets", (_req, res, next) => {
+runnerRouter.get("/internal/secrets", async (_req, res, next) => {
   try {
-    const secrets = secretModel.getAllDecryptedSecrets();
-    res.status(200).json(secrets);
+    const all = await container.secrets.listPublic();
+    const result: Record<string, string> = {};
+    for (const s of all) {
+      const enc = await container.secrets.getEncrypted(s.id);
+      if (enc) {
+        try {
+          result[s.name] = decryptSecret(enc.encryptedValue);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }
@@ -34,7 +45,7 @@ runnerRouter.post("/internal/runs/claim", async (req, res, next) => {
       res.status(204).send();
       return;
     }
-    req.log.info({ runId: String(run._id), runnerId, eventName: "run_claimed" }, "run claimed");
+    req.log.info({ runId: String(run._id ?? run.id), runnerId, eventName: "run_claimed" }, "run claimed");
     res.status(200).json(run);
   } catch (err) {
     next(err);
@@ -147,7 +158,7 @@ runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
       return;
     }
 
-    const cached = await Pipeline.findOne({ pipelineId }).lean().exec();
+    const cached = await container.persistence.pipelineRepository.findById(pipelineId);
     if (cached !== null && cached.refSha === ref) {
       res.status(200).json({ rawYaml: cached.rawYaml, updatedAt: cached.updatedAt, refSha: cached.refSha, source: "cache" });
       return;
@@ -159,11 +170,7 @@ runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
     }
 
     const rawYaml = await fetchPipelineYamlFromGithub({ pipelineId, refSha: ref, logger: req.log });
-    await Pipeline.findOneAndUpdate(
-      { pipelineId },
-      { $set: { pipelineId, refSha: ref, rawYaml, updatedAt: new Date() } },
-      { upsert: true },
-    ).exec();
+    await container.persistence.pipelineRepository.upsertSummaryStats(pipelineId, ref, rawYaml);
 
     res.status(200).json({ rawYaml, updatedAt: new Date().toISOString(), refSha: ref, source: "github" });
   } catch (err) {

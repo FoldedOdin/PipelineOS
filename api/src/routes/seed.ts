@@ -1,6 +1,6 @@
 import { Router } from "express";
+import { container } from "../bootstrap/index.js";
 import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
-import { Pipeline } from "../models/Pipeline.js";
 
 export const seedRouter = Router();
 
@@ -14,15 +14,10 @@ seedRouter.post("/internal/seed/pipelines", requireInternalApiKey, async (req, r
       return;
     }
 
-    await Pipeline.findOneAndUpdate(
-      { pipelineId },
-      { $set: { pipelineId, refSha: "seed", rawYaml, updatedAt: new Date() } },
-      { upsert: true },
-    ).exec();
+    await container.persistence.pipelineRepository.upsertSummaryStats(pipelineId, "seed", rawYaml);
 
     res.status(204).send();
   } catch (err) {
     next(err);
   }
 });
-

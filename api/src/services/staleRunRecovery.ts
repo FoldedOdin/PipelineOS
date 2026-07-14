@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
-import { Run } from "../models/Run.js";
+import { container } from "../bootstrap/index.js";
+import type { StageDTO } from "../domain/dto/index.js";
 
 function minutesToMs(minutes: number): number {
   return minutes * 60 * 1000;
@@ -16,36 +17,30 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
   const tick = async (): Promise<void> => {
     const staleBefore = new Date(Date.now() - staleAfterMs);
 
-    const candidates = await Run.find({
-      status: "running",
-      startedAt: { $ne: null, $lte: staleBefore },
-      $or: [
-        // Preferred: lease expiry for multi-runner safe claiming.
-        { claimExpiresAt: { $ne: null, $lte: new Date() } },
-        // Backwards-compatible fallback: heartbeat-based staleness.
-        { lastHeartbeatAt: null },
-        { lastHeartbeatAt: { $lte: staleBefore } },
-      ],
-    })
-      .limit(25)
-      .exec();
+    const candidates = await container.persistence.runRepository.findStaleRuns(staleBefore, 25);
 
     if (candidates.length === 0) return;
 
     for (const run of candidates) {
-      run.status = "failed";
-      run.finishedAt = new Date();
-
-      const stages = run.stages as unknown as { status?: string; finishedAt?: Date | null }[];
-      for (const stage of stages) {
+      const now = new Date();
+      const updatedStages: StageDTO[] = run.stages.map((stage) => {
         if (stage.status === "running" || stage.status === "pending") {
-          stage.status = "failed";
-          stage.finishedAt = new Date();
+          return {
+            ...stage,
+            status: "failed",
+            finishedAt: now,
+          };
         }
-      }
+        return stage;
+      });
 
-      await run.save();
-      logger.warn({ runId: String(run._id), eventName: "stale_run_recovered" }, "marked stale run as failed");
+      await container.persistence.runRepository.update(run.id, {
+        status: "failed",
+        finishedAt: now,
+        stages: updatedStages,
+      });
+
+      logger.warn({ runId: run.id, eventName: "stale_run_recovered" }, "marked stale run as failed");
     }
   };
 
@@ -63,4 +58,3 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
     },
   };
 }
-

@@ -1,6 +1,5 @@
-import type { QueryFilter } from "mongoose";
-import type { RemediationRuleSchemaType } from "../models/RemediationRule.js";
-import { RemediationRule } from "../models/RemediationRule.js";
+import { container } from "../bootstrap/index.js";
+import type { RemediationRuleDTO } from "../domain/index.js";
 
 export interface RemediationRuleView {
   id: string;
@@ -54,80 +53,53 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, n));
 }
 
-function toView(doc: {
-  _id: unknown;
-  enabled?: unknown;
-  name?: unknown;
-  match?: unknown;
-  action?: unknown;
-  auto?: unknown;
-  stats?: unknown;
-  createdAt?: Date;
-  updatedAt?: Date;
-}): RemediationRuleView | null {
-  const id =
-    typeof doc._id === "object" && doc._id !== null && "toString" in doc._id ? (doc._id as { toString: () => string }).toString() : null;
-  const name = asNonEmptyString(doc.name);
-  if (!id || !name) return null;
-  const enabled = doc.enabled === undefined ? true : Boolean(doc.enabled);
-
-  const matchObj = typeof doc.match === "object" && doc.match !== null ? (doc.match as Record<string, unknown>) : {};
-  const pipelineId = asNonEmptyString(matchObj.pipelineId) ?? null;
-  const stageName = asNonEmptyString(matchObj.stageName) ?? null;
-  const anyPatterns = asStringArray(matchObj.anyPatterns, 20);
-  const anyHintSubstrings = asStringArray(matchObj.anyHintSubstrings, 20);
-
-  const actionObj = typeof doc.action === "object" && doc.action !== null ? (doc.action as Record<string, unknown>) : null;
-  if (actionObj === null) return null;
-  const type = actionObj.type === "retry_stage" ? "retry_stage" : null;
-  if (type === null) return null;
-
-  const maxAttempts = clampInt(actionObj.maxAttempts, 2, 1, 5);
-  const backoffSeconds = clampInt(actionObj.backoffSeconds, 0, 0, 120);
-
-  const autoObj = typeof doc.auto === "object" && doc.auto !== null ? (doc.auto as Record<string, unknown>) : {};
-  const autoEnabled = autoObj.enabled === true;
-  const minAttempts = clampInt(autoObj.minAttempts, 10, 1, 500);
-  const disableBelowSuccessRateRaw =
-    typeof autoObj.disableBelowSuccessRate === "number" && Number.isFinite(autoObj.disableBelowSuccessRate)
-      ? autoObj.disableBelowSuccessRate
-      : 0.2;
-  const disableBelowSuccessRate = Math.max(0, Math.min(1, disableBelowSuccessRateRaw));
-
-  const statsObj = typeof doc.stats === "object" && doc.stats !== null ? (doc.stats as Record<string, unknown>) : {};
-  const attempts = clampInt(statsObj.attempts, 0, 0, 1_000_000);
-  const saves = clampInt(statsObj.saves, 0, 0, 1_000_000);
-  const failures = clampInt(statsObj.failures, 0, 0, 1_000_000);
+function dtoToView(dto: RemediationRuleDTO): RemediationRuleView {
+  const attempts = dto.stats.attempts;
+  const saves = dto.stats.saves;
+  const failures = dto.stats.failures;
   const successRate = attempts > 0 ? saves / attempts : 0;
-  const lastAppliedAt = statsObj.lastAppliedAt instanceof Date ? statsObj.lastAppliedAt.toISOString() : null;
-  const lastOutcomeAt = statsObj.lastOutcomeAt instanceof Date ? statsObj.lastOutcomeAt.toISOString() : null;
 
   return {
-    id,
-    enabled,
-    name,
-    match: { pipelineId, stageName, anyPatterns, anyHintSubstrings },
-    action: { type, maxAttempts, backoffSeconds },
-    auto: { enabled: autoEnabled, minAttempts, disableBelowSuccessRate },
-    stats: { attempts, saves, failures, successRate, lastAppliedAt, lastOutcomeAt },
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : new Date().toISOString(),
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : new Date().toISOString(),
+    id: dto.id,
+    enabled: dto.enabled,
+    name: dto.name,
+    match: {
+      pipelineId: dto.match.pipelineId,
+      stageName: dto.match.stageName,
+      anyPatterns: dto.match.anyPatterns,
+      anyHintSubstrings: dto.match.anyHintSubstrings,
+    },
+    action: {
+      type: dto.action.type,
+      maxAttempts: dto.action.maxAttempts,
+      backoffSeconds: dto.action.backoffSeconds,
+    },
+    auto: {
+      enabled: dto.auto.enabled,
+      minAttempts: dto.auto.minAttempts,
+      disableBelowSuccessRate: dto.auto.disableBelowSuccessRate,
+    },
+    stats: {
+      attempts,
+      saves,
+      failures,
+      successRate,
+      lastAppliedAt: dto.stats.lastAppliedAt?.toISOString() ?? null,
+      lastOutcomeAt: dto.stats.lastOutcomeAt?.toISOString() ?? null,
+    },
+    createdAt: dto.createdAt.toISOString(),
+    updatedAt: dto.updatedAt.toISOString(),
   };
 }
 
 export const remediationService = {
   async listRules(pipelineId: string | null): Promise<RemediationRuleView[]> {
-    const filter: QueryFilter<RemediationRuleSchemaType> = {};
-    if (pipelineId !== null) {
-      filter.$or = [{ "match.pipelineId": null }, { "match.pipelineId": pipelineId }];
-    }
-    const docs = await RemediationRule.find(filter).sort({ createdAt: -1 }).lean<Record<string, unknown>[]>().exec();
-    const views: RemediationRuleView[] = [];
-    for (const d of docs) {
-      const view = toView(d as unknown as { _id: unknown; createdAt?: Date; updatedAt?: Date });
-      if (view) views.push(view);
-    }
-    return views;
+    const all = await container.persistence.remediationRuleRepository.findAll();
+    const filtered = pipelineId !== null
+      ? all.filter((r) => r.match.pipelineId === null || r.match.pipelineId === pipelineId)
+      : all;
+    filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return filtered.map(dtoToView);
   },
 
   async createRule(body: unknown): Promise<RemediationRuleView | null> {
@@ -162,7 +134,7 @@ export const remediationService = {
         : 0.2;
     const disableBelowSuccessRate = Math.max(0, Math.min(1, disableBelowSuccessRateRaw));
 
-    const created = await RemediationRule.create({
+    const created = await container.persistence.remediationRuleRepository.create({
       enabled,
       name,
       match: { pipelineId, stageName, anyPatterns, anyHintSubstrings },
@@ -170,58 +142,39 @@ export const remediationService = {
       auto: { enabled: autoEnabled, minAttempts, disableBelowSuccessRate },
     });
 
-    const reloaded = await RemediationRule.findById(created._id).lean<Record<string, unknown>>().exec();
-    if (reloaded === null) return null;
-    return toView(reloaded as unknown as { _id: unknown; createdAt?: Date; updatedAt?: Date });
+    return dtoToView(created);
   },
 
   async recordRuleApplication(input: {
     ruleId: string;
     outcome: "attempt" | "save" | "failure";
   }): Promise<RemediationRuleView | null> {
+    const rule = await container.persistence.remediationRuleRepository.findById(input.ruleId);
+    if (!rule) return null;
+
     const now = new Date();
-    const inc: Record<string, number> = {};
-    const set: Record<string, unknown> = {};
+    const attempts = rule.stats.attempts + (input.outcome === "attempt" ? 1 : 0);
+    const saves = rule.stats.saves + (input.outcome === "save" ? 1 : 0);
+    const failures = rule.stats.failures + (input.outcome === "failure" ? 1 : 0);
+    const lastAppliedAt = input.outcome === "attempt" ? now : rule.stats.lastAppliedAt;
+    const lastOutcomeAt = now;
 
-    if (input.outcome === "attempt") {
-      inc["stats.attempts"] = 1;
-      set["stats.lastAppliedAt"] = now;
-      set["stats.lastOutcomeAt"] = now;
-    } else if (input.outcome === "save") {
-      inc["stats.saves"] = 1;
-      set["stats.lastOutcomeAt"] = now;
-    } else {
-      inc["stats.failures"] = 1;
-      set["stats.lastOutcomeAt"] = now;
+    let enabled = rule.enabled;
+    const successRate = attempts > 0 ? saves / attempts : 0;
+    if (rule.auto.enabled && enabled && attempts >= rule.auto.minAttempts && successRate < rule.auto.disableBelowSuccessRate) {
+      enabled = false;
     }
 
-    const updated = await RemediationRule.findByIdAndUpdate(
-      input.ruleId,
-      { $inc: inc, $set: set },
-      { new: true },
-    )
-      .lean<Record<string, unknown>>()
-      .exec();
-    if (updated === null) return null;
+    const updated = await container.persistence.remediationRuleRepository.update(rule.id, {
+      enabled,
+      stats: { attempts, saves, failures, lastAppliedAt, lastOutcomeAt },
+    });
+    if (!updated) return null;
 
-    // Auto-demotion guardrail: only disable if explicitly in auto mode and enough attempts have accumulated.
-    const view = toView(updated as unknown as { _id: unknown; createdAt?: Date; updatedAt?: Date });
-    if (view === null) return null;
-    if (view.auto.enabled && view.enabled && view.stats.attempts >= view.auto.minAttempts && view.stats.successRate < view.auto.disableBelowSuccessRate) {
-      const disabled = await RemediationRule.findByIdAndUpdate(view.id, { $set: { enabled: false } }, { new: true })
-        .lean<Record<string, unknown>>()
-        .exec();
-      if (disabled !== null) {
-        return toView(disabled as unknown as { _id: unknown; createdAt?: Date; updatedAt?: Date });
-      }
-    }
-
-    return view;
+    return dtoToView(updated);
   },
 
   async deleteRule(id: string): Promise<boolean> {
-    const res = await RemediationRule.deleteOne({ _id: id }).exec();
-    return res.deletedCount === 1;
+    return container.persistence.remediationRuleRepository.delete(id);
   },
 } as const;
-

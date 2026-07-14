@@ -1,0 +1,40 @@
+import type {
+  IConfigAdapter,
+  IPersistenceAdapter,
+  IStorageAdapter,
+  ILogStorageAdapter,
+  ISecretsAdapter,
+} from "../domain/index.js";
+import {
+  EnvConfigAdapter,
+  MongoPersistenceAdapter,
+  LocalStorageAdapter,
+  LocalLogStorageAdapter,
+  MemorySecretsAdapter,
+} from "../infrastructure/index.js";
+
+export interface IApplicationContainer {
+  readonly config: IConfigAdapter;
+  readonly persistence: IPersistenceAdapter;
+  readonly storage: IStorageAdapter;
+  readonly logStorage: ILogStorageAdapter;
+  readonly secrets: ISecretsAdapter;
+}
+
+class ApplicationContainer implements IApplicationContainer {
+  readonly config: IConfigAdapter;
+  readonly persistence: IPersistenceAdapter;
+  readonly storage: IStorageAdapter;
+  readonly logStorage: ILogStorageAdapter;
+  readonly secrets: ISecretsAdapter;
+
+  constructor() {
+    this.config = new EnvConfigAdapter();
+    this.persistence = new MongoPersistenceAdapter();
+    this.storage = new LocalStorageAdapter(this.config.getStorageDirectory());
+    this.logStorage = new LocalLogStorageAdapter(this.config.getLogsDirectory());
+    this.secrets = new MemorySecretsAdapter();
+  }
+}
+
+export const container: IApplicationContainer = new ApplicationContainer();

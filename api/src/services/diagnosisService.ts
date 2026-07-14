@@ -1,5 +1,4 @@
-import { isValidObjectId } from "mongoose";
-import { Run } from "../models/Run.js";
+import { container } from "../bootstrap/index.js";
 
 export interface DiagnosisResult {
   summary: string;
@@ -82,16 +81,14 @@ async function maybeLlmSummarize(logsTail: string, hints: string[]): Promise<str
 
 export const diagnosisService = {
   async diagnoseStage(runId: string, stageName: string): Promise<DiagnosisResult | null> {
-    if (!isValidObjectId(runId)) return null;
-    const run = await Run.findById(runId).select({ stages: 1 }).lean<{ stages?: unknown[] }>().exec();
+    const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return null;
     const stages = Array.isArray(run.stages) ? run.stages : [];
-    const stage = stages.find((s) => typeof s === "object" && s !== null && (s as Record<string, unknown>).name === stageName);
+    const stage = stages.find((s) => typeof s === "object" && s !== null && s.name === stageName);
     if (stage === undefined) return null;
 
-    const rec = stage as Record<string, unknown>;
-    const logs = typeof rec.logs === "string" ? rec.logs : "";
-    const status = rec.status;
+    const logs = typeof stage.logs === "string" ? stage.logs : "";
+    const status = stage.status;
     const hints = extractHints(logs, 12);
     const patterns = detectPatterns(logs);
 

@@ -1,6 +1,5 @@
-import { isValidObjectId } from "mongoose";
-import { Run } from "../models/Run.js";
-import { RunnerRegistration } from "../models/RunnerRegistration.js";
+import { container } from "../bootstrap/index.js";
+import type { UpdateRunInput } from "../domain/index.js";
 import { flakinessService } from "../services/flakinessService.js";
 import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
 import { pino } from "pino";
@@ -17,25 +16,6 @@ function minutesToMs(minutes: number): number {
 
 const claimLeaseMs = minutesToMs(1);
 
-interface StageDoc {
-  name: string;
-  status: StageStatus;
-  image: string;
-  command: string;
-  exitCode: number | null;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  durationMs: number | null;
-  logs: string;
-  metrics?: {
-    cpuSeconds?: number | null;
-    cpuPercentAvg?: number | null;
-    cpuPercentMax?: number | null;
-    memBytesMax?: number | null;
-    costUsdEstimated?: number | null;
-  };
-}
-
 function requiredString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
@@ -48,6 +28,7 @@ function readStringField(body: unknown, key: string): string | null {
 function readNumberField(body: unknown, key: string): number | null {
   if (typeof body !== "object" || body === null) return null;
   const value = (body as Record<string, unknown>)[key];
+  if (value === null) return null;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
@@ -68,144 +49,142 @@ function isRunStatus(value: unknown): value is RunStatus {
 
 export const runnerService = {
   async claimNextQueuedRun(runnerId: RunnerId): Promise<Record<string, unknown> | null> {
-    const now = new Date();
-    const leaseUntil = new Date(now.getTime() + claimLeaseMs);
-    const doc = await Run.findOneAndUpdate(
-      {
-        status: "queued",
-        $or: [{ claimExpiresAt: null }, { claimExpiresAt: { $lte: now } }],
-      },
-      {
-        $set: {
-          status: "running",
-          startedAt: now,
-          lastHeartbeatAt: now,
-          claimedBy: runnerId,
-          claimExpiresAt: leaseUntil,
-        },
-      },
-      { sort: { createdAt: 1 }, new: true },
-    )
-      .lean<Record<string, unknown>>()
-      .exec();
+    const nowStr = new Date().toISOString();
+    const dto = await container.persistence.runRepository.claimNextQueuedRun(runnerId, nowStr);
+    if (!dto) return null;
 
-    await RunnerRegistration.findOneAndUpdate(
-      { runnerId },
-      { $set: { runnerId, lastHeartbeatAt: now, status: "online" } },
-      { upsert: true }
-    ).exec();
+    await container.persistence.runnerRegistrationRepository.registerOrHeartbeat({
+      runnerId,
+      lastHeartbeatAt: new Date(),
+      status: "online",
+    });
 
-    return doc;
+    return { ...dto, _id: dto.id };
   },
 
   async heartbeatRun(runId: string, runnerId: RunnerId): Promise<boolean> {
-    if (!isValidObjectId(runId)) return false;
+    const run = await container.persistence.runRepository.findById(runId);
+    if (!run || run.status !== "running" || run.claimedBy !== runnerId) return false;
+
     const now = new Date();
     const leaseUntil = new Date(now.getTime() + claimLeaseMs);
-    const updated = await Run.findOneAndUpdate(
-      { _id: runId, status: "running", claimedBy: runnerId },
-      { $set: { lastHeartbeatAt: now, claimExpiresAt: leaseUntil } },
-    ).exec();
+    const updated = await container.persistence.runRepository.update(runId, {
+      lastHeartbeatAt: now,
+      claimExpiresAt: leaseUntil,
+    });
 
     if (updated !== null) {
-      await RunnerRegistration.findOneAndUpdate(
-        { runnerId },
-        { $set: { runnerId, lastHeartbeatAt: now, status: "online" } },
-        { upsert: true }
-      ).exec();
+      await container.persistence.runnerRegistrationRepository.registerOrHeartbeat({
+        runnerId,
+        lastHeartbeatAt: now,
+        status: "online",
+      });
+      runnerServiceLogger.debug({ event: "run_heartbeat", runId, runnerId }, "Run heartbeat received");
     }
 
-    runnerServiceLogger.debug({ event: "run_heartbeat", runId, runnerId }, "Run heartbeat received");
     return updated !== null;
   },
 
   async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string; activeRuns?: number; maxConcurrentRuns?: number }): Promise<void> {
     const patch = info ?? {};
-    await RunnerRegistration.findOneAndUpdate(
-      { runnerId },
-      { $set: { runnerId, lastHeartbeatAt: new Date(), status: "online", ...patch } },
-      { upsert: true }
-    ).exec();
+    await container.persistence.runnerRegistrationRepository.registerOrHeartbeat({
+      runnerId,
+      lastHeartbeatAt: new Date(),
+      status: "online",
+      ...patch,
+    });
   },
 
   async listRunners(): Promise<(Record<string, unknown> & { isStale: boolean })[]> {
     const RUNNER_STALE_MS = 30_000; // 30 seconds
-    const runners = await RunnerRegistration.find().sort({ lastHeartbeatAt: -1 }).lean<Record<string, unknown>[]>().exec();
+    const runners = await container.persistence.runnerRegistrationRepository.findAll();
     const now = Date.now();
-    return runners.map(r => {
-      const hb = r.lastHeartbeatAt instanceof Date ? r.lastHeartbeatAt.getTime() : 0;
+    const sorted = [...runners].sort((a, b) => {
+      const tA = a.lastHeartbeatAt?.getTime() ?? 0;
+      const tB = b.lastHeartbeatAt?.getTime() ?? 0;
+      return tB - tA;
+    });
+    return sorted.map((r) => {
+      const hb = r.lastHeartbeatAt?.getTime() ?? 0;
       return { ...r, isStale: now - hb > RUNNER_STALE_MS };
     });
   },
 
   async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {
-    if (!isValidObjectId(runId)) return null;
     const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
     const status = isRunStatus(statusValue) ? statusValue : null;
     if (status === null) return null;
 
-    const patch: Record<string, unknown> = { status };
+    const patch: UpdateRunInput = { status };
     if (status === "success" || status === "failed" || status === "cancelled") {
       patch.finishedAt = new Date();
       patch.claimedBy = null;
       patch.claimExpiresAt = null;
     }
 
-    const updated = await Run.findByIdAndUpdate(runId, { $set: patch }, { new: true }).lean<Record<string, unknown>>().exec();
+    const updated = await container.persistence.runRepository.update(runId, patch);
     if (updated !== null) {
       publishRunStatus(runId, status);
+      return { ...updated, _id: updated.id };
     }
-    return updated;
+    return null;
   },
 
   async upsertStage(runId: string, stageName: string, body: unknown): Promise<boolean> {
-    if (!isValidObjectId(runId)) return false;
     const image = readStringField(body, "image");
     const command = readStringField(body, "command");
     if (image === null || command === null) return false;
 
-    const run = await Run.findById(runId).exec();
+    const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return false;
 
-    const stages = run.stages as unknown as StageDoc[];
-    const existing = stages.find((s) => s.name === stageName);
-    if (existing) {
-      existing.image = image;
-      existing.command = command;
-      await run.save();
-      return true;
+    const stages = [...run.stages];
+    const index = stages.findIndex((s) => s.name === stageName);
+    if (index >= 0) {
+      stages[index] = {
+        ...stages[index],
+        image,
+        command,
+      };
+    } else {
+      stages.push({
+        name: stageName,
+        status: "pending",
+        image,
+        command,
+        exitCode: null,
+        startedAt: null,
+        finishedAt: null,
+        durationMs: null,
+        logs: "",
+        metrics: {
+          cpuSeconds: null,
+          cpuPercentAvg: null,
+          cpuPercentMax: null,
+          memBytesMax: null,
+          costUsdEstimated: null,
+        },
+      });
     }
 
-    stages.push({
-      name: stageName,
-      status: "pending",
-      image,
-      command,
-      exitCode: null,
-      startedAt: null,
-      finishedAt: null,
-      durationMs: null,
-      logs: "",
-    });
-    await run.save();
-    return true;
+    const updated = await container.persistence.runRepository.update(runId, { stages });
+    return updated !== null;
   },
 
   async updateStageStatus(runId: string, stageName: string, body: unknown): Promise<boolean> {
-    if (!isValidObjectId(runId)) return false;
     const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
     const status = isStageStatus(statusValue) ? statusValue : null;
     const exitCode = readNumberField(body, "exitCode");
     if (status === null) return false;
 
-    const run = await Run.findById(runId).exec();
+    const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return false;
 
-    const stages = run.stages as unknown as StageDoc[];
-    const stage = stages.find((s) => s.name === stageName);
-    if (stage === undefined) return false;
+    const stages = [...run.stages];
+    const index = stages.findIndex((s) => s.name === stageName);
+    if (index < 0) return false;
 
-    stage.status = status;
+    const stage = { ...stages[index], status };
     if (status === "running") {
       stage.startedAt = new Date();
       stage.finishedAt = null;
@@ -220,17 +199,20 @@ export const runnerService = {
         stage.exitCode = exitCode;
       }
     }
+    stages[index] = stage;
 
-    await run.save();
+    const updated = await container.persistence.runRepository.update(runId, { stages });
+    if (!updated) return false;
+
     publishStageStatus(runId, stageName, status);
 
     if (status === "success" || status === "failed") {
-      const pipelineId = typeof run.pipelineId === "string" ? run.pipelineId : String(run.pipelineId);
+      const pipelineId = run.pipelineId;
       void flakinessService
         .recordOutcome({
           pipelineId,
           stageName,
-          runId: run._id,
+          runId: run.id,
           success: status === "success",
         })
         .catch(() => undefined);
@@ -240,55 +222,65 @@ export const runnerService = {
   },
 
   async appendStageLogs(runId: string, stageName: string, body: unknown): Promise<boolean> {
-    if (!isValidObjectId(runId)) return false;
     const logs = readStringField(body, "logs");
     if (logs === null) return false;
 
-    const run = await Run.findById(runId).exec();
+    const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return false;
 
-    const stages = run.stages as unknown as StageDoc[];
-    const stage = stages.find((s) => s.name === stageName);
-    if (stage === undefined) return false;
+    const stages = [...run.stages];
+    const index = stages.findIndex((s) => s.name === stageName);
+    if (index < 0) return false;
 
     const maxChunkChars = 16_384;
     const maxStoredChars = 1_000_000;
     const chunk = logs.length > maxChunkChars ? logs.slice(-maxChunkChars) : logs;
 
-    stage.logs = `${stage.logs}${chunk}`;
-    if (stage.logs.length > maxStoredChars) {
-      stage.logs = stage.logs.slice(-maxStoredChars);
+    let newLogs = `${stages[index].logs ?? ""}${chunk}`;
+    if (newLogs.length > maxStoredChars) {
+      newLogs = newLogs.slice(-maxStoredChars);
     }
-    await run.save();
+
+    stages[index] = {
+      ...stages[index],
+      logs: newLogs,
+    };
+
+    const updated = await container.persistence.runRepository.update(runId, { stages });
+    if (!updated) return false;
+
     publishStageLog(runId, stageName, chunk);
     return true;
   },
 
   async updateStageMetrics(runId: string, stageName: string, body: unknown): Promise<boolean> {
-    if (!isValidObjectId(runId)) return false;
-
     const cpuSeconds = readNullableNumberField(body, "cpuSeconds");
     const cpuPercentAvg = readNullableNumberField(body, "cpuPercentAvg");
     const cpuPercentMax = readNullableNumberField(body, "cpuPercentMax");
     const memBytesMax = readNullableNumberField(body, "memBytesMax");
     const costUsdEstimated = readNullableNumberField(body, "costUsdEstimated");
 
-    const run = await Run.findById(runId).exec();
+    const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return false;
 
-    const stages = run.stages as unknown as StageDoc[];
-    const stage = stages.find((s) => s.name === stageName);
-    if (stage === undefined) return false;
+    const stages = [...run.stages];
+    const index = stages.findIndex((s) => s.name === stageName);
+    if (index < 0) return false;
 
-    stage.metrics ??= {};
-    if (cpuSeconds !== null) stage.metrics.cpuSeconds = cpuSeconds;
-    if (cpuPercentAvg !== null) stage.metrics.cpuPercentAvg = cpuPercentAvg;
-    if (cpuPercentMax !== null) stage.metrics.cpuPercentMax = cpuPercentMax;
-    if (memBytesMax !== null) stage.metrics.memBytesMax = memBytesMax;
-    if (costUsdEstimated !== null) stage.metrics.costUsdEstimated = costUsdEstimated;
+    const existingMetrics = stages[index].metrics ?? {};
+    const metrics = { ...existingMetrics };
+    if (cpuSeconds !== null) metrics.cpuSeconds = cpuSeconds;
+    if (cpuPercentAvg !== null) metrics.cpuPercentAvg = cpuPercentAvg;
+    if (cpuPercentMax !== null) metrics.cpuPercentMax = cpuPercentMax;
+    if (memBytesMax !== null) metrics.memBytesMax = memBytesMax;
+    if (costUsdEstimated !== null) metrics.costUsdEstimated = costUsdEstimated;
 
-    await run.save();
-    return true;
+    stages[index] = {
+      ...stages[index],
+      metrics,
+    };
+
+    const updated = await container.persistence.runRepository.update(runId, { stages });
+    return updated !== null;
   },
 } as const;
-

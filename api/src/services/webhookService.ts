@@ -3,8 +3,8 @@
  * Full implementation ships with the webhook route milestone.
  */
 import type { Logger } from "pino";
-import { Run } from "../models/Run.js";
-import { WebhookDelivery } from "../models/WebhookDelivery.js";
+import { container } from "../bootstrap/index.js";
+
 type GithubEventName = "push" | "pull_request";
 
 type GithubWebhookBody = unknown;
@@ -61,22 +61,20 @@ export async function processGithubWebhookEvent(input: {
   }
 
   if (deliveryId !== undefined && deliveryId !== "") {
-    try {
-      await WebhookDelivery.create({ deliveryId, event, pipelineId });
-    } catch (err) {
-      // Duplicate key => GitHub retry: ignore safely.
-      const code = typeof err === "object" && err !== null ? (err as Record<string, unknown>).code : undefined;
-      if (code === 11000) {
-        logger.info({ deliveryId, event, pipelineId }, "duplicate webhook delivery ignored");
-        return;
-      }
-      throw err;
+    const recorded = await container.persistence.webhookDeliveryRepository.recordDelivery({
+      deliveryId,
+      event,
+      pipelineId,
+    });
+    if (!recorded) {
+      logger.info({ deliveryId, event, pipelineId }, "duplicate webhook delivery ignored");
+      return;
     }
   } else {
     logger.warn({ event, pipelineId }, "missing x-github-delivery header; webhook is not idempotent");
   }
 
-  const run = await Run.create({
+  const run = await container.persistence.runRepository.create({
     pipelineId,
     commitSha,
     branch,
@@ -84,12 +82,9 @@ export async function processGithubWebhookEvent(input: {
     event,
     status: "queued",
     stages: [],
-    startedAt: null,
-    finishedAt: null,
-    durationMs: null,
   });
 
-  logger.info({ runId: String(run._id), pipelineId, event, eventName: "webhook_received", deliveryId }, "queued run created from webhook");
+  logger.info({ runId: run.id, pipelineId, event, eventName: "webhook_received", deliveryId }, "queued run created from webhook");
 }
 
 export const webhookService = {
