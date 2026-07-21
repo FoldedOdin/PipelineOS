@@ -2,7 +2,7 @@ import "./telemetry.js";
 import "dotenv/config";
 import { pino } from "pino";
 import type { Logger } from "pino";
-import { executeQueuedRun } from "./executor.js";
+import { executeQueuedRun, pingRunnerHeartbeat, killAllActiveContainers } from "./executor.js";
 import { validateRunnerConfig } from "./config.js";
 
 function createRunnerLogger(): Logger {
@@ -13,27 +13,24 @@ function createRunnerLogger(): Logger {
 
 const logger = createRunnerLogger();
 
-/**
- * Runner entrypoint: polls the API for queued runs and executes pipeline stages.
- * Polling and Docker execution are implemented in later milestones.
- */
-function main(): void {
+async function main(): Promise<void> {
   validateRunnerConfig(logger);
+
   const intervalMs = 2000;
-  logger.info({ intervalMs }, "runner scaffold started; polling loop reserved");
-  // MAX_CONCURRENT_RUNS is an optimization to control parallelism within this single runner instance.
-  // The actual distributed concurrency lock is maintained by MongoDB via claimNextQueuedRun's atomic findOneAndUpdate.
   const maxConcurrentRuns = Number(process.env.MAX_CONCURRENT_RUNS) || 1;
   const inFlightPromises = new Set<Promise<void>>();
   let shuttingDown = false;
 
+  // Register runner with the Control Plane immediately on startup
+  // so it appears in the runner list before the first polling tick.
+  await pingRunnerHeartbeat(logger, 0, maxConcurrentRuns);
+  logger.info({ intervalMs, maxConcurrentRuns }, "runner started; polling loop active");
+
   const intervalId = setInterval(() => {
     if (shuttingDown) return;
 
-    // Send the runner idle heartbeat ping.
-    void import("./executor.js").then(({ pingRunnerHeartbeat }) => {
-      void pingRunnerHeartbeat(logger, inFlightPromises.size, maxConcurrentRuns);
-    });
+    // Keep registration fresh on every tick.
+    void pingRunnerHeartbeat(logger, inFlightPromises.size, maxConcurrentRuns);
 
     if (inFlightPromises.size >= maxConcurrentRuns) return;
 
@@ -44,39 +41,42 @@ function main(): void {
       .finally(() => {
         inFlightPromises.delete(promise);
       });
-    
+
     inFlightPromises.add(promise);
-    logger.debug("runner heartbeat");
   }, intervalMs);
 
   const beginShutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
-    logger.info({ signal }, "runner shutting down");
+    logger.info({ signal }, "runner shutting down — stopping in-flight containers");
     clearInterval(intervalId);
 
-    const timeoutMs = 15_000;
+    const timeoutMs = 30_000;
     const timeout = setTimeout(() => {
       logger.warn({ timeoutMs }, "runner shutdown timeout exceeded; exiting");
       process.exit(1);
     }, timeoutMs);
 
-    const wait = Promise.allSettled(Array.from(inFlightPromises));
-    wait
+    // Kill all active Docker containers before waiting for promises to settle.
+    void killAllActiveContainers(logger)
       .catch(() => undefined)
       .finally(() => {
-        clearTimeout(timeout);
-        logger.info("runner exited cleanly");
-        process.exit(0);
+        void Promise.allSettled(Array.from(inFlightPromises))
+          .catch(() => undefined)
+          .finally(() => {
+            clearTimeout(timeout);
+            logger.info("runner exited cleanly");
+            process.exit(0);
+          });
       });
   };
 
-  process.on("SIGTERM", () => {
-    beginShutdown("SIGTERM");
-  });
-  process.on("SIGINT", () => {
-    beginShutdown("SIGINT");
-  });
+  process.on("SIGTERM", () => beginShutdown("SIGTERM"));
+  process.on("SIGINT", () => beginShutdown("SIGINT"));
 }
 
-main();
+void main().catch((err: unknown) => {
+  // Config validation or startup errors — exit immediately.
+  pino().error({ err }, "runner startup failed");
+  process.exit(1);
+});

@@ -1,208 +1,37 @@
 /**
- * Orchestrates stage execution order, Docker runs, log streaming, and run status updates.
- * Filled in when the runner service is fully wired to the API.
+ * executor.ts
+ *
+ * Thin pipeline orchestrator. Responsible for:
+ *  - Claiming the next queued run
+ *  - Preparing the workspace (git clone)
+ *  - Fetching pipeline YAML, remediation rules, and secrets
+ *  - Running all stages in dependency order via stage-runner
+ *  - Finalising the run status
+ *  - Workspace cleanup
+ *
+ * All Docker and HTTP details live in container-runner.ts and api-client.ts.
  */
 import type { Logger } from "pino";
-import { PassThrough } from "node:stream";
-import { createDockerClient } from "./docker.js";
+import {
+  claimNextRun,
+  heartbeatRun,
+  setRunStatus,
+  fetchPipelineYaml,
+  fetchRemediationRules,
+  fetchSecrets,
+  pingRunnerHeartbeat,
+} from "./api-client.js";
+import { killAllActiveContainers } from "./container-runner.js";
+import { runStage } from "./stage-runner.js";
 import { parsePipelineYaml } from "./yamlParser.js";
 import { resolveStageOrder } from "./dependencyResolver.js";
 import { prepareWorkspace, cleanWorkspace } from "./workspace.js";
 import { getRetainWorkspaceOnFailure } from "./config.js";
 import type { PipelineDefinition, PipelineStage } from "./types.js";
 
-type ClaimedRun = { _id: string } & Record<string, unknown>;
-
-interface DiagnosisPayload {
-  summary: string;
-  hints: string[];
-  patterns: string[];
-}
-
-interface RemediationRule {
-  id: string;
-  enabled: boolean;
-  name: string;
-  match: {
-    pipelineId: string | null;
-    stageName: string | null;
-    anyPatterns: string[];
-    anyHintSubstrings: string[];
-  };
-  action: { type: "retry_stage"; maxAttempts: number; backoffSeconds: number };
-  auto?: { enabled: boolean };
-  stats?: { attempts: number; saves: number; failures: number; successRate: number };
-}
-
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value === "") {
-    throw new Error(`${name} is required`);
-  }
-  return value;
-}
-
-function looksLikePlaceholder(value: string): boolean {
-  return value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here";
-}
-
-function optionalEnvNumber(name: string): number | null {
-  const raw = process.env[name];
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-function isHeaderTupleArray(value: unknown): value is [string, string][] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string" && typeof entry[1] === "string",
-    )
-  );
-}
-
-function isHeaderRecord(value: unknown): value is Record<string, string> {
-  if (typeof value !== "object" || value === null) return false;
-  if (Array.isArray(value)) return false;
-  if (value instanceof Headers) return false;
-  return Object.values(value as Record<string, unknown>).every((v) => typeof v === "string");
-}
-
-async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  const apiUrl = requiredEnv("API_URL").replace(/\/$/, "");
-  const internalKey = requiredEnv("INTERNAL_API_KEY");
-  if (looksLikePlaceholder(internalKey)) {
-    throw new Error("INTERNAL_API_KEY is a placeholder; set a real value in deploy/.env");
-  }
-  const runnerId = requiredEnv("RUNNER_ID");
-  if (looksLikePlaceholder(runnerId)) {
-    throw new Error("RUNNER_ID is a placeholder; set a real value in deploy/.env");
-  }
-
-  const hdrs: unknown = init?.headers;
-  const extraHeaders: Record<string, string> =
-    hdrs instanceof Headers ? Object.fromEntries(hdrs.entries()) : isHeaderTupleArray(hdrs) ? Object.fromEntries(hdrs) : isHeaderRecord(hdrs) ? hdrs : {};
-
-  return await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: {
-      "x-internal-api-key": internalKey,
-      "x-runner-id": runnerId,
-      ...extraHeaders,
-    },
-  });
-}
-
-async function claimNextRun(logger: Logger): Promise<ClaimedRun | null> {
-  const res = await apiFetch("/internal/runs/claim", { method: "POST" });
-  if (res.status === 204) return null;
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text() }, "claim failed");
-    return null;
-  }
-  const data: unknown = await res.json();
-  const id = typeof data === "object" && data !== null ? (data as Record<string, unknown>)._id : undefined;
-  if (typeof id !== "string" || id === "") return null;
-  return { ...(data as Record<string, unknown>), _id: id };
-}
-
-async function fetchPipelineYaml(pipelineId: string, refSha: string, logger: Logger): Promise<string | null> {
-  const res = await apiFetch(`/internal/pipelines/${encodeURIComponent(pipelineId)}?ref=${encodeURIComponent(refSha)}`, {
-    method: "GET",
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch pipeline yaml");
-    return null;
-  }
-  const data: unknown = await res.json();
-  const rawYaml = typeof data === "object" && data !== null ? (data as Record<string, unknown>).rawYaml : undefined;
-  return typeof rawYaml === "string" ? rawYaml : null;
-}
-
-async function fetchRemediationRules(pipelineId: string, logger: Logger): Promise<RemediationRule[]> {
-  const res = await apiFetch(`/internal/remediation/rules?pipelineId=${encodeURIComponent(pipelineId)}`, { method: "GET" });
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch remediation rules");
-    return [];
-  }
-  const json: unknown = await res.json();
-  if (typeof json !== "object" || json === null) return [];
-  const rulesRaw = (json as Record<string, unknown>).rules;
-  if (!Array.isArray(rulesRaw)) return [];
-  const rules: RemediationRule[] = [];
-  for (const r of rulesRaw) {
-    if (typeof r !== "object" || r === null) continue;
-    const o = r as Record<string, unknown>;
-    const id = typeof o.id === "string" ? o.id : null;
-    const enabled = o.enabled !== false;
-    const name = typeof o.name === "string" ? o.name : "rule";
-    const match = typeof o.match === "object" && o.match !== null ? (o.match as Record<string, unknown>) : {};
-    const action = typeof o.action === "object" && o.action !== null ? (o.action as Record<string, unknown>) : null;
-    if (!id || action === null) continue;
-    if (action.type !== "retry_stage") continue;
-    const maxAttempts = typeof action.maxAttempts === "number" ? action.maxAttempts : 2;
-    const backoffSeconds = typeof action.backoffSeconds === "number" ? action.backoffSeconds : 0;
-    rules.push({
-      id,
-      enabled,
-      name,
-      match: {
-        pipelineId: typeof match.pipelineId === "string" ? match.pipelineId : null,
-        stageName: typeof match.stageName === "string" ? match.stageName : null,
-        anyPatterns: Array.isArray(match.anyPatterns) ? match.anyPatterns.filter((v): v is string => typeof v === "string") : [],
-        anyHintSubstrings: Array.isArray(match.anyHintSubstrings)
-          ? match.anyHintSubstrings.filter((v): v is string => typeof v === "string")
-          : [],
-      },
-      action: { type: "retry_stage", maxAttempts, backoffSeconds },
-    });
-  }
-  return rules;
-}
-
-async function fetchSecrets(logger: Logger): Promise<Record<string, string>> {
-  const res = await apiFetch(`/internal/secrets`, { method: "GET" });
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text() }, "failed to fetch secrets");
-    return {};
-  }
-  const json: unknown = await res.json();
-  if (typeof json !== "object" || json === null) return {};
-  
-  const secrets: Record<string, string> = {};
-  for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
-    if (typeof v === "string") {
-      secrets[k] = v;
-    }
-  }
-  return secrets;
-}
-
-async function fetchDiagnosis(runId: string, stageName: string): Promise<DiagnosisPayload | null> {
-  const res = await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/diagnosis`, { method: "GET" });
-  if (!res.ok) return null;
-  const json: unknown = await res.json();
-  if (typeof json !== "object" || json === null) return null;
-  const o = json as Record<string, unknown>;
-  const summary = typeof o.summary === "string" ? o.summary : "";
-  const hints = Array.isArray(o.hints) ? o.hints.filter((v): v is string => typeof v === "string") : [];
-  const patterns = Array.isArray(o.patterns) ? o.patterns.filter((v): v is string => typeof v === "string") : [];
-  return { summary, hints, patterns };
-}
-
-async function recordRuleOutcome(ruleId: string, outcome: "attempt" | "save" | "failure", logger: Logger): Promise<void> {
-  const res = await apiFetch(`/internal/remediation/rules/${encodeURIComponent(ruleId)}/outcomes`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ outcome }),
-  });
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), ruleId, outcome }, "failed to record rule outcome");
-  }
-}
+// ---------------------------------------------------------------------------
+// Demo pipeline — used when no YAML is found for a run
+// ---------------------------------------------------------------------------
 
 function demoPipeline(): PipelineDefinition {
   return {
@@ -221,512 +50,21 @@ function demoPipeline(): PipelineDefinition {
   };
 }
 
-async function upsertStage(runId: string, stageName: string, stage: { image: string; command: string }): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(stage),
-  });
-}
-
-async function setStageStatus(runId: string, stageName: string, status: string, exitCode?: number): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/status`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status, exitCode }),
-  });
-}
-
-async function appendLogs(runId: string, stageName: string, logs: string): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/logs`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ logs }),
-  });
-}
-
-async function postStageMetrics(
-  runId: string,
-  stageName: string,
-  body: {
-    cpuSeconds: number | null;
-    cpuPercentAvg: number | null;
-    cpuPercentMax: number | null;
-    memBytesMax: number | null;
-    costUsdEstimated: number | null;
-  },
-): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/metrics`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-async function setRunStatus(runId: string, status: string): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/status`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status }),
-  });
-}
-
-import { execSync } from "node:child_process";
-import fs from "node:fs/promises";
-import path from "node:path";
-
-async function heartbeatRun(runId: string): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/heartbeat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({}),
-  });
-}
-
-async function uploadArtifacts(runId: string, stageName: string, artifacts: string[], workspacePath: string, logger: Logger) {
-  if (artifacts.length === 0) return;
-  try {
-    const tarPath = path.join("/tmp", `${runId}_${stageName}_artifacts.tar.gz`);
-    const paths = artifacts.map((p) => `"${p}"`).join(" ");
-    execSync(`tar -czf ${tarPath} -C ${workspacePath} ${paths}`, { stdio: "ignore" });
-    
-    const buf = await fs.readFile(tarPath);
-    const res = await apiFetch(`/internal/runs/${runId}/artifacts/${stageName}`, {
-      method: "POST",
-      headers: { "content-type": "application/gzip" },
-      body: buf,
-    });
-    if (!res.ok) {
-      logger.warn({ status: res.status, body: await res.text() }, "failed to upload artifacts");
-    }
-    await fs.unlink(tarPath).catch(() => undefined);
-  } catch (err) {
-    logger.warn({ err }, "failed to pack/upload artifacts");
-  }
-}
-
-async function uploadCache(key: string, paths: string[], workspacePath: string, logger: Logger) {
-  if (paths.length === 0) return;
-  try {
-    const tarPath = path.join("/tmp", `cache_${key}.tar.gz`);
-    const pStr = paths.map((p) => `"${p}"`).join(" ");
-    execSync(`tar -czf ${tarPath} -C ${workspacePath} ${pStr}`, { stdio: "ignore" });
-    
-    const buf = await fs.readFile(tarPath);
-    const res = await apiFetch(`/internal/cache/${key}`, {
-      method: "POST",
-      headers: { "content-type": "application/gzip" },
-      body: buf,
-    });
-    if (!res.ok) {
-      logger.warn({ status: res.status, body: await res.text() }, "failed to upload cache");
-    }
-    await fs.unlink(tarPath).catch(() => undefined);
-  } catch (err) {
-    logger.warn({ err }, "failed to pack/upload cache");
-  }
-}
-
-async function downloadCache(key: string, workspacePath: string, logger: Logger) {
-  try {
-    const res = await apiFetch(`/internal/cache/${key}`, { method: "GET" });
-    if (res.status === 404) return;
-    if (!res.ok) {
-      logger.warn({ status: res.status, body: await res.text() }, "failed to download cache");
-      return;
-    }
-    
-    const buf = await res.arrayBuffer();
-    const tarPath = path.join("/tmp", `dl_cache_${key}.tar.gz`);
-    await fs.writeFile(tarPath, Buffer.from(buf));
-    
-    execSync(`tar -xzf ${tarPath} -C ${workspacePath}`, { stdio: "ignore" });
-    await fs.unlink(tarPath).catch(() => undefined);
-  } catch (err) {
-    logger.warn({ err }, "failed to download/extract cache");
-  }
-}
-
-function ruleMatches(rule: RemediationRule, ctx: { pipelineId: string; stageName: string; diagnosis: DiagnosisPayload | null }): boolean {
-  if (!rule.enabled) return false;
-  if (rule.match.pipelineId && rule.match.pipelineId !== ctx.pipelineId) return false;
-  if (rule.match.stageName && rule.match.stageName !== ctx.stageName) return false;
-
-  if (rule.match.anyPatterns.length > 0) {
-    const patterns = new Set(ctx.diagnosis?.patterns ?? []);
-    const ok = rule.match.anyPatterns.some((p) => patterns.has(p));
-    if (!ok) return false;
-  }
-
-  if (rule.match.anyHintSubstrings.length > 0) {
-    const hints = (ctx.diagnosis?.hints ?? []).join("\n");
-    const ok = rule.match.anyHintSubstrings.some((s) => hints.includes(s));
-    if (!ok) return false;
-  }
-
-  return true;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function computeCpuPercent(sample: unknown): number | null {
-  if (typeof sample !== "object" || sample === null) return null;
-  const s = sample as Record<string, unknown>;
-  const cpuStats = typeof s.cpu_stats === "object" && s.cpu_stats !== null ? (s.cpu_stats as Record<string, unknown>) : null;
-  const preCpuStats =
-    typeof s.precpu_stats === "object" && s.precpu_stats !== null ? (s.precpu_stats as Record<string, unknown>) : null;
-  if (cpuStats === null || preCpuStats === null) return null;
-
-  const cpuUsage =
-    typeof cpuStats.cpu_usage === "object" && cpuStats.cpu_usage !== null ? (cpuStats.cpu_usage as Record<string, unknown>) : null;
-  const preCpuUsage =
-    typeof preCpuStats.cpu_usage === "object" && preCpuStats.cpu_usage !== null
-      ? (preCpuStats.cpu_usage as Record<string, unknown>)
-      : null;
-  if (cpuUsage === null || preCpuUsage === null) return null;
-
-  const cpuTotal = cpuUsage.total_usage;
-  const prevCpu = preCpuUsage.total_usage;
-  const systemTotal = cpuStats.system_cpu_usage;
-  const prevSystem = preCpuStats.system_cpu_usage;
-  const onlineCpusRaw = cpuStats.online_cpus;
-  const onlineCpus = typeof onlineCpusRaw === "number" && Number.isFinite(onlineCpusRaw) && onlineCpusRaw > 0 ? onlineCpusRaw : 1;
-
-  if (typeof cpuTotal !== "number" || typeof systemTotal !== "number") return null;
-  if (typeof prevCpu !== "number" || typeof prevSystem !== "number") return null;
-  const cpuDelta = cpuTotal - prevCpu;
-  const systemDelta = systemTotal - prevSystem;
-  if (cpuDelta <= 0 || systemDelta <= 0) return null;
-  return (cpuDelta / systemDelta) * onlineCpus * 100;
-}
-
-async function getContainerStatsOnce(container: unknown): Promise<unknown> {
-  // dockerode's Container#stats has overloaded callback/promise signatures; keep typing loose here.
-  return await (container as { stats: (opts: { stream: false }) => Promise<unknown> }).stats({ stream: false });
-}
-
-async function runContainerWithStats(input: {
-  docker: ReturnType<typeof createDockerClient>;
-  image: string;
-  cmd: string[];
-  env: Record<string, string>;
-  stdout: PassThrough;
-  stderr: PassThrough;
-  logger: Logger;
-  workspacePath: string | null;
-}): Promise<{
-  statusCode: number;
-  cpuSeconds: number | null;
-  cpuPercentAvg: number | null;
-  cpuPercentMax: number | null;
-  memBytesMax: number | null;
-  memBytesAvg: number | null;
-}> {
-  const container = await input.docker.createContainer({
-    Image: input.image,
-    Cmd: input.cmd,
-    Tty: false,
-    Env: Object.entries(input.env).map(([k, v]) => `${k}=${v}`),
-    AttachStdout: true,
-    AttachStderr: true,
-    ...(input.workspacePath
-      ? {
-          WorkingDir: "/workspace",
-          HostConfig: {
-            Binds: [`${input.workspacePath}:/workspace`],
-          },
-        }
-      : {}),
-  });
-
-  const stream = await container.attach({ stream: true, stdout: true, stderr: true });
-  stream.pipe(input.stdout);
-  stream.pipe(input.stderr);
-
-  await container.start();
-
-  let samples = 0;
-  let memBytesMax = 0;
-  let memBytesSum = 0;
-  let cpuPctMax = 0;
-  let cpuPctSum = 0;
-  let firstCpuTotal: number | null = null;
-  let lastCpuTotal: number | null = null;
-
-  const pollEveryMs = 2000;
-  const poll = async (): Promise<void> => {
-    try {
-      const raw = await getContainerStatsOnce(container);
-      if (typeof raw !== "object" || raw === null) return;
-      const s = raw as Record<string, unknown>;
-
-      const memStats = typeof s.memory_stats === "object" && s.memory_stats !== null ? (s.memory_stats as Record<string, unknown>) : {};
-      const usage = memStats.usage;
-      if (typeof usage === "number" && Number.isFinite(usage) && usage > memBytesMax) {
-        memBytesMax = usage;
-      }
-      if (typeof usage === "number" && Number.isFinite(usage) && usage >= 0) {
-        memBytesSum += usage;
-      }
-
-      const cpuPct = computeCpuPercent(raw);
-      if (typeof cpuPct === "number" && Number.isFinite(cpuPct) && cpuPct > cpuPctMax) {
-        cpuPctMax = cpuPct;
-      }
-      if (typeof cpuPct === "number" && Number.isFinite(cpuPct) && cpuPct >= 0) {
-        cpuPctSum += cpuPct;
-      }
-
-      const cpuStats = typeof s.cpu_stats === "object" && s.cpu_stats !== null ? (s.cpu_stats as Record<string, unknown>) : {};
-      const cpuUsage = typeof cpuStats.cpu_usage === "object" && cpuStats.cpu_usage !== null ? (cpuStats.cpu_usage as Record<string, unknown>) : {};
-      const totalUsage = cpuUsage.total_usage;
-      if (typeof totalUsage === "number" && Number.isFinite(totalUsage)) {
-        firstCpuTotal ??= totalUsage;
-        lastCpuTotal = totalUsage;
-      }
-
-      samples += 1;
-    } catch (err) {
-      input.logger.debug({ err }, "stats poll failed");
-    }
-  };
-
-  const pollTimer = setInterval(() => {
-    void poll();
-  }, pollEveryMs);
-
-  // Take an initial poll quickly so we capture early memory spikes.
-  await poll();
-  const waitResult: unknown = await container.wait();
-  clearInterval(pollTimer);
-  await poll();
-
-  const statusCodeRaw =
-    typeof waitResult === "object" && waitResult !== null ? (waitResult as Record<string, unknown>).StatusCode : undefined;
-  const code = typeof statusCodeRaw === "number" && Number.isFinite(statusCodeRaw) ? statusCodeRaw : 1;
-
-  // Best-effort cleanup.
-  try {
-    await container.remove({ force: true });
-  } catch (err) {
-    input.logger.debug({ err }, "container cleanup failed");
-  }
-
-  const cpuSeconds =
-    typeof firstCpuTotal === "number" && typeof lastCpuTotal === "number" && lastCpuTotal >= firstCpuTotal
-      ? (lastCpuTotal - firstCpuTotal) / 1e9
-      : null;
-  const cpuPercentAvg = samples > 0 ? cpuPctSum / samples : null;
-  const cpuPercentMax = samples > 0 ? cpuPctMax : null;
-  const memAvg = samples > 0 ? memBytesSum / samples : null;
-
-  return {
-    statusCode: code,
-    cpuSeconds,
-    cpuPercentAvg,
-    cpuPercentMax,
-    memBytesMax: samples > 0 ? memBytesMax : null,
-    memBytesAvg: memAvg,
-  };
-}
-
-async function ensureImage(docker: ReturnType<typeof createDockerClient>, image: string, logger: Logger): Promise<void> {
-  try {
-    await docker.getImage(image).inspect();
-    return;
-  } catch {
-    // fall through to pull
-  }
-
-  const unknownToMessage = (value: unknown): string => {
-    if (value instanceof Error) return value.message;
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return "unknown error";
-    }
-  };
-
-  await new Promise<void>((resolve, reject) => {
-    void docker.pull(image, (err: unknown, stream?: NodeJS.ReadableStream) => {
-      if (err) {
-        reject(err instanceof Error ? err : new Error(unknownToMessage(err)));
-        return;
-      }
-      if (stream === undefined) {
-        reject(new Error("docker pull returned no stream"));
-        return;
-      }
-      docker.modem.followProgress(
-        stream,
-        (pullErr: unknown) => {
-          if (pullErr) reject(pullErr instanceof Error ? pullErr : new Error(unknownToMessage(pullErr)));
-          else resolve();
-        },
-        (event: unknown) => {
-          if (typeof event === "object" && event !== null && "status" in event) {
-            const status = (event as Record<string, unknown>).status;
-            if (typeof status === "string") logger.debug({ image, status }, "pull progress");
-          }
-        },
-      );
-    });
-  });
-}
-
-async function runStage(
-  logger: Logger,
-  runId: string,
-  stage: PipelineStage,
-  rules: RemediationRule[],
-  pipelineId: string | null,
-  workspacePath: string | null,
-  secrets: Record<string, string>,
-): Promise<void> {
-  const stageName = stage.name;
-  const image = stage.image;
-  const command = `sh -lc ${JSON.stringify(stage.run)}`;
-
-  await upsertStage(runId, stageName, { image, command });
-
-  const docker = createDockerClient();
-  await ensureImage(docker, image, logger);
-
-  const stdout = new PassThrough();
-  const stderr = new PassThrough();
-
-  const secretValues = Object.values(secrets).filter((s) => s.length > 0);
-  const scrub = (text: string) => {
-    let scrubbed = text;
-    for (const val of secretValues) {
-      scrubbed = scrubbed.split(val).join("***");
-    }
-    return scrubbed;
-  };
-
-  stdout.on("data", (chunk: Buffer) => {
-    void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
-  });
-  stderr.on("data", (chunk: Buffer) => {
-    void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
-  });
-
-  const cmd = ["sh", "-lc", stage.run];
-
-  const applicable = pipelineId
-    ? rules.filter((r) => ruleMatches(r, { pipelineId, stageName, diagnosis: null }))
-    : rules.filter((r) => r.enabled && (r.match.stageName === null || r.match.stageName === stageName));
-  const retryRule = applicable.length > 0 ? applicable[0] : null;
-  const maxAttempts = retryRule ? Math.min(5, Math.max(1, Math.floor(retryRule.action.maxAttempts))) : 1;
-  const backoffSeconds = retryRule ? Math.min(120, Math.max(0, Math.floor(retryRule.action.backoffSeconds))) : 0;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await setStageStatus(runId, stageName, "running");
-    if (attempt > 1) {
-      await appendLogs(runId, stageName, `\n[pipelineos] remediation: retry attempt ${String(attempt)}/${String(maxAttempts)}\n`);
-    }
-    if (retryRule && attempt === 2) {
-      // Count a "remediation attempt" only when we actually retry (attempt 2+).
-      await recordRuleOutcome(retryRule.id, "attempt", logger);
-    }
-    
-    if (attempt === 1 && workspacePath && stage.cache) {
-      await downloadCache(stage.cache.key, workspacePath, logger);
-    }
-
-    const wallStart = Date.now();
-    const result = await runContainerWithStats({
-      docker,
-      image,
-      cmd,
-      env: { ...secrets, ...stage.env },
-      stdout,
-      stderr,
-      logger,
-      workspacePath,
-    });
-    const wallSeconds = Math.max(0, (Date.now() - wallStart) / 1000);
-
-    const cpuPrice = optionalEnvNumber("COST_CPU_USD_PER_CPU_SECOND") ?? 0;
-    const memPrice = optionalEnvNumber("COST_MEM_USD_PER_GB_SECOND") ?? 0;
-    const memGbSeconds = result.memBytesAvg !== null ? (result.memBytesAvg / 1e9) * wallSeconds : null;
-    const costUsdEstimated =
-      result.cpuSeconds !== null && memGbSeconds !== null ? result.cpuSeconds * cpuPrice + memGbSeconds * memPrice : null;
-
-    void postStageMetrics(runId, stageName, {
-      cpuSeconds: result.cpuSeconds,
-      cpuPercentAvg: result.cpuPercentAvg,
-      cpuPercentMax: result.cpuPercentMax,
-      memBytesMax: result.memBytesMax,
-      costUsdEstimated,
-    }).catch(() => undefined);
-
-    const statusCode = result.statusCode;
-    if (statusCode === 0) {
-      await setStageStatus(runId, stageName, "success", 0);
-      if (retryRule && attempt > 1) {
-        await recordRuleOutcome(retryRule.id, "save", logger);
-      }
-      
-      if (workspacePath) {
-        if (stage.artifacts && stage.artifacts.length > 0) {
-          await uploadArtifacts(runId, stageName, stage.artifacts, workspacePath, logger);
-        }
-        if (stage.cache && stage.cache.paths.length > 0) {
-          await uploadCache(stage.cache.key, stage.cache.paths, workspacePath, logger);
-        }
-      }
-      return;
-    }
-
-    await setStageStatus(runId, stageName, "failed", statusCode);
-
-    const diagnosis = await fetchDiagnosis(runId, stageName);
-    if (pipelineId && retryRule && !ruleMatches(retryRule, { pipelineId, stageName, diagnosis })) {
-      throw new Error(`stage ${stageName} failed with exit code ${String(statusCode)}`);
-    }
-
-    if (attempt < maxAttempts) {
-      if (diagnosis?.summary) {
-        await appendLogs(runId, stageName, `[pipelineos] diagnosis: ${diagnosis.summary}\n`);
-      }
-      if (backoffSeconds > 0) {
-        await appendLogs(runId, stageName, `[pipelineos] backoff: waiting ${String(backoffSeconds)}s before retry\n`);
-        await sleep(backoffSeconds * 1000);
-      }
-      continue;
-    }
-
-    if (retryRule && attempt > 1) {
-      await recordRuleOutcome(retryRule.id, "failure", logger);
-    }
-    throw new Error(`stage ${stageName} failed with exit code ${String(statusCode)}`);
-  }
-}
+// ---------------------------------------------------------------------------
+// Pipeline orchestration
+// ---------------------------------------------------------------------------
 
 async function runPipeline(
   logger: Logger,
   runId: string,
   pipeline: PipelineDefinition,
-  rules: RemediationRule[],
+  rules: Awaited<ReturnType<typeof fetchRemediationRules>>,
   pipelineId: string | null,
   workspacePath: string | null,
   secrets: Record<string, string>,
 ): Promise<void> {
   const order = resolveStageOrder(pipeline.stages);
   const byName = new Map<string, PipelineStage>(pipeline.stages.map((s) => [s.name, s]));
-
-  // Pre-create stage records so logs/status endpoints succeed even if runner crashes mid-flight.
-  for (const stageName of order) {
-    const stage = byName.get(stageName);
-    if (!stage) continue;
-    const command = `sh -lc ${JSON.stringify(stage.run)}`;
-    await upsertStage(runId, stageName, { image: stage.image, command });
-  }
 
   for (const stageName of order) {
     const stage = byName.get(stageName);
@@ -735,26 +73,25 @@ async function runPipeline(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 export async function executeQueuedRun(logger: Logger): Promise<void> {
   const claimed = await claimNextRun(logger);
   if (claimed === null) return;
 
   const runId = claimed._id;
-  const runnerId = requiredEnv("RUNNER_ID");
-  
-  // Note: runId is the correlation key for background job execution and SSE log streams.
-  // requestId is strictly for API request correlation and should not be used as the job correlation key.
+  const runnerId = process.env.RUNNER_ID ?? "unknown";
+  const { pipelineId, commitSha } = claimed;
+
   const runLogger = logger.child({ runId, runnerId });
 
-  const pipelineIdValue = (claimed as Record<string, unknown>).pipelineId;
-  const pipelineId = typeof pipelineIdValue === "string" ? pipelineIdValue : null;
-  const commitShaValue = (claimed as Record<string, unknown>).commitSha;
-  const commitSha = typeof commitShaValue === "string" ? commitShaValue : null;
   let heartbeatInterval: NodeJS.Timeout | null = null;
   let workspacePath: string | null = null;
   let success = false;
+
   try {
-    // Keep the run "fresh" while we work, so the API can detect stale runners.
     heartbeatInterval = setInterval(() => {
       void heartbeatRun(runId);
     }, 10_000);
@@ -769,6 +106,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
         runLogger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
       }
     }
+
     const rules = pipelineId ? await fetchRemediationRules(pipelineId, runLogger) : [];
     const secrets = await fetchSecrets(runLogger);
     await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath, secrets);
@@ -778,12 +116,10 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
     runLogger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
   } finally {
-    if (heartbeatInterval !== null) {
-      clearInterval(heartbeatInterval);
-    }
+    if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
     if (workspacePath) {
       if (!success && getRetainWorkspaceOnFailure()) {
-        runLogger.info({ workspacePath }, "Retaining workspace on failure due to config");
+        runLogger.info({ workspacePath }, "retaining workspace on failure due to config");
       } else {
         await cleanWorkspace(runId, runLogger);
       }
@@ -791,19 +127,4 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   }
 }
 
-export async function pingRunnerHeartbeat(logger: Logger, activeRuns: number, maxConcurrentRuns: number): Promise<void> {
-  try {
-    const os = await import("node:os");
-    const version = "0.1.0";
-    const hostname = os.hostname();
-    const platform = os.platform();
-    
-    await apiFetch("/internal/runners/heartbeat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version, hostname, platform, activeRuns, maxConcurrentRuns })
-    });
-  } catch (err) {
-    logger.debug({ err }, "runner heartbeat ping failed");
-  }
-}
+export { pingRunnerHeartbeat, killAllActiveContainers };
