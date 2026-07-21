@@ -168,6 +168,11 @@ export const runnerService = {
     }
 
     const updated = await container.persistence.runRepository.update(runId, { stages });
+    if (updated !== null) {
+      // Notify WebSocket subscribers that a new stage has been registered.
+      const newIdx = index >= 0 ? index : stages.length - 1;
+      publishStageStatus(runId, stageName, stages[newIdx]?.status ?? "pending");
+    }
     return updated !== null;
   },
 

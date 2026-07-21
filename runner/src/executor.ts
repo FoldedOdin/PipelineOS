@@ -27,6 +27,7 @@ import { parsePipelineYaml } from "./yamlParser.js";
 import { resolveStageOrder } from "./dependencyResolver.js";
 import { prepareWorkspace, cleanWorkspace } from "./workspace.js";
 import { getRetainWorkspaceOnFailure } from "./config.js";
+import { eventBus } from "./InProcessEventBus.js";
 import type { PipelineDefinition, PipelineStage } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -87,9 +88,12 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
 
   const runLogger = logger.child({ runId, runnerId });
 
+  const runStart = Date.now();
   let heartbeatInterval: NodeJS.Timeout | null = null;
   let workspacePath: string | null = null;
   let success = false;
+
+  eventBus.publish({ type: "RunClaimed", runId, runnerId, pipelineId, ts: new Date() });
 
   try {
     heartbeatInterval = setInterval(() => {
@@ -112,9 +116,11 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
     await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath, secrets);
     await setRunStatus(runId, "success");
     success = true;
+    eventBus.publish({ type: "RunFinished", runId, status: "success", durationMs: Date.now() - runStart, ts: new Date() });
   } catch (err) {
     runLogger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
+    eventBus.publish({ type: "RunFinished", runId, status: "failed", durationMs: Date.now() - runStart, ts: new Date() });
   } finally {
     if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
     if (workspacePath) {

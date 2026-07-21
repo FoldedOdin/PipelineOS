@@ -3,6 +3,10 @@
  *
  * Executes a single pipeline stage: secret scrubbing, retry loop,
  * remediation rule matching, log streaming, metrics, artifact/cache upload.
+ *
+ * Publishes typed domain events to the eventBus at each lifecycle point so
+ * that the API WebSocket layer (and future external bus) can subscribe without
+ * polling.
  */
 import type { Logger } from "pino";
 import type { PipelineStage } from "./types.js";
@@ -20,6 +24,7 @@ import {
 } from "./api-client.js";
 import { runContainer, StageTimeoutError } from "./container-runner.js";
 import { getDefaultTimeoutMs } from "./config.js";
+import { eventBus } from "./InProcessEventBus.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,6 +114,7 @@ export async function runStage(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await setStageStatus(runId, stageName, "running");
+    eventBus.publish({ type: "StageStarted", runId, stageName, image, attempt, ts: new Date() });
 
     if (attempt > 1) {
       await appendLogs(
@@ -134,10 +140,14 @@ export async function runStage(
         cmd,
         env: { ...secrets, ...stage.env },
         onStdout: (chunk) => {
-          void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
+          const text = scrub(chunk.toString("utf8"));
+          void appendLogs(runId, stageName, text);
+          eventBus.publish({ type: "LogChunkReceived", runId, stageName, chunk: text, source: "stdout", ts: new Date() });
         },
         onStderr: (chunk) => {
-          void appendLogs(runId, stageName, scrub(chunk.toString("utf8")));
+          const text = scrub(chunk.toString("utf8"));
+          void appendLogs(runId, stageName, text);
+          eventBus.publish({ type: "LogChunkReceived", runId, stageName, chunk: text, source: "stderr", ts: new Date() });
         },
         logger,
         workspacePath,
@@ -146,8 +156,9 @@ export async function runStage(
       });
     } catch (err) {
       if (err instanceof StageTimeoutError) {
-        await setStageStatus(runId, stageName, "failed", 124); // 124 = timeout exit code (GNU convention)
+        await setStageStatus(runId, stageName, "failed", 124);
         await appendLogs(runId, stageName, `\n[pipelineos] ${err.message}\n`);
+        eventBus.publish({ type: "StageTimedOut", runId, stageName, limitMs: timeoutMs ?? 0, ts: new Date() });
         throw err;
       }
       throw err;
@@ -173,6 +184,14 @@ export async function runStage(
 
     if (result.statusCode === 0) {
       await setStageStatus(runId, stageName, "success", 0);
+      eventBus.publish({
+        type: "StageFinished",
+        runId,
+        stageName,
+        exitCode: 0,
+        durationMs: Date.now() - wallStart,
+        ts: new Date(),
+      });
 
       if (retryRule && attempt > 1) {
         await recordRuleOutcome(retryRule.id, "save", logger);
@@ -190,6 +209,15 @@ export async function runStage(
     }
 
     await setStageStatus(runId, stageName, "failed", result.statusCode);
+    eventBus.publish({
+      type: "StageFailed",
+      runId,
+      stageName,
+      exitCode: result.statusCode,
+      attempt,
+      maxAttempts,
+      ts: new Date(),
+    });
 
     const diagnosis = await fetchDiagnosis(runId, stageName);
     if (pipelineId && retryRule && !ruleMatches(retryRule, { pipelineId, stageName, diagnosis })) {

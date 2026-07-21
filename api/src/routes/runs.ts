@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { diagnosisService } from "../services/diagnosisService.js";
 import { runService } from "../services/runService.js";
+import { handleSseStream } from "../ws/logStream.js";
 
 /**
  * Run listing and detail endpoints; handlers added when persistence layer is complete.
@@ -30,6 +31,12 @@ runsRouter.get("/api/runs/:id", async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * SSE live stream for a run. Browser clients subscribe with:
+ *   const evtSrc = new EventSource('/api/runs/:id/stream');
+ */
+runsRouter.get("/api/runs/:id/stream", handleSseStream);
 
 runsRouter.post("/api/runs/:id/replay", async (req, res, next) => {
   try {
