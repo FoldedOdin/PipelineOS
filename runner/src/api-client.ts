@@ -339,11 +339,15 @@ export async function uploadArtifacts(
     execSync(`tar -czf ${tarPath} -C ${workspacePath} ${paths}`, { stdio: "ignore" });
 
     const buf = await fs.readFile(tarPath);
-    const res = await apiFetch(`/internal/runs/${runId}/artifacts/${stageName}`, {
-      method: "POST",
-      headers: { "content-type": "application/gzip" },
-      body: buf,
-    });
+    const fileName = "artifacts.tar.gz";
+    const res = await apiFetch(
+      `/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/artifacts/${fileName}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/gzip" },
+        body: buf,
+      }
+    );
     if (!res.ok) {
       logger.warn({ status: res.status, body: await res.text() }, "failed to upload artifacts");
     }

@@ -11,5 +11,6 @@ export * from "./database/IBackupAdapter.js";
 export * from "./storage/IStorageAdapter.js";
 
 export * from "./storage/ILogStorageAdapter.js";
+export * from "./storage/IArtifactStorageAdapter.js";
 export * from "./secrets/ISecretsAdapter.js";
 export * from "./config/IConfigAdapter.js";

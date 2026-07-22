@@ -178,3 +178,25 @@ runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
   }
 });
 
+runnerRouter.post("/internal/runs/:id/stages/:stageName/artifacts/:fileName", async (req, res, next) => {
+  try {
+    const run = await container.persistence.runRepository.findById(req.params.id);
+    if (!run) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    
+    await container.artifactStorage.uploadArtifact(
+      run.pipelineId,
+      req.params.id,
+      req.params.stageName,
+      req.params.fileName,
+      req
+    );
+    
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+

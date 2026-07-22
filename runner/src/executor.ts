@@ -28,6 +28,7 @@ import { resolveStageOrder } from "./dependencyResolver.js";
 import { prepareWorkspace, cleanWorkspace } from "./workspace.js";
 import { getRetainWorkspaceOnFailure } from "./config.js";
 import { eventBus } from "./InProcessEventBus.js";
+import { randomUUID } from "node:crypto";
 import type { PipelineDefinition, PipelineStage } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -93,7 +94,14 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
   let workspacePath: string | null = null;
   let success = false;
 
-  eventBus.publish({ type: "RunClaimed", runId, runnerId, pipelineId, ts: new Date() });
+  eventBus.publish({
+    id: randomUUID(),
+    version: 1,
+    type: "RunClaimed",
+    occurredAt: new Date().toISOString(),
+    source: `runner:${runnerId}`,
+    payload: { type: "RunClaimed", runId, runnerId, pipelineId }
+  });
 
   try {
     heartbeatInterval = setInterval(() => {
@@ -116,11 +124,25 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
     await runPipeline(runLogger, runId, pipeline, rules, pipelineId, workspacePath, secrets);
     await setRunStatus(runId, "success");
     success = true;
-    eventBus.publish({ type: "RunFinished", runId, status: "success", durationMs: Date.now() - runStart, ts: new Date() });
+    eventBus.publish({
+      id: randomUUID(),
+      version: 1,
+      type: "RunFinished",
+      occurredAt: new Date().toISOString(),
+      source: `runner:${runnerId}`,
+      payload: { type: "RunFinished", runId, status: "success", durationMs: Date.now() - runStart }
+    });
   } catch (err) {
     runLogger.error({ err, runId }, "run execution failed");
     await setRunStatus(runId, "failed");
-    eventBus.publish({ type: "RunFinished", runId, status: "failed", durationMs: Date.now() - runStart, ts: new Date() });
+    eventBus.publish({
+      id: randomUUID(),
+      version: 1,
+      type: "RunFinished",
+      occurredAt: new Date().toISOString(),
+      source: `runner:${runnerId}`,
+      payload: { type: "RunFinished", runId, status: "failed", durationMs: Date.now() - runStart }
+    });
   } finally {
     if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
     if (workspacePath) {

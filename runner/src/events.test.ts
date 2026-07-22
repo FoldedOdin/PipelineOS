@@ -14,11 +14,17 @@ describe("InProcessEventBus", () => {
     bus.subscribe("RunClaimed", (e) => received.push(e));
 
     bus.publish({
+      id: "evt-1",
+      version: 1,
       type: "RunClaimed",
-      runId: "run-1",
-      runnerId: "runner-a",
-      pipelineId: "pipe-1",
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "RunClaimed",
+        runId: "run-1",
+        runnerId: "runner-a",
+        pipelineId: "pipe-1",
+      }
     });
 
     expect(received).toHaveLength(1);
@@ -30,11 +36,17 @@ describe("InProcessEventBus", () => {
     bus.subscribe("RunFinished", (e) => received.push(e));
 
     bus.publish({
+      id: "evt-2",
+      version: 1,
       type: "RunClaimed",
-      runId: "run-2",
-      runnerId: "runner-b",
-      pipelineId: null,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "RunClaimed",
+        runId: "run-2",
+        runnerId: "runner-b",
+        pipelineId: null,
+      }
     });
 
     expect(received).toHaveLength(0);
@@ -46,12 +58,18 @@ describe("InProcessEventBus", () => {
     bus.subscribe("StageStarted", () => calls.push("b"));
 
     bus.publish({
+      id: "evt-3",
+      version: 1,
       type: "StageStarted",
-      runId: "run-3",
-      stageName: "build",
-      image: "node:20",
-      attempt: 1,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "StageStarted",
+        runId: "run-3",
+        stageName: "build",
+        image: "node:20",
+        attempt: 1,
+      }
     });
 
     expect(calls).toEqual(["a", "b"]);
@@ -62,21 +80,33 @@ describe("InProcessEventBus", () => {
     const unsub = bus.subscribe("RunFinished", (e) => received.push(e));
 
     bus.publish({
+      id: "evt-4",
+      version: 1,
       type: "RunFinished",
-      runId: "run-4",
-      status: "success",
-      durationMs: 100,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "RunFinished",
+        runId: "run-4",
+        status: "success",
+        durationMs: 100,
+      }
     });
 
     unsub();
 
     bus.publish({
+      id: "evt-5",
+      version: 1,
       type: "RunFinished",
-      runId: "run-5",
-      status: "failed",
-      durationMs: 200,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "RunFinished",
+        runId: "run-5",
+        status: "failed",
+        durationMs: 200,
+      }
     });
 
     expect(received).toHaveLength(1);
@@ -90,11 +120,17 @@ describe("InProcessEventBus", () => {
     });
 
     bus.publish({
+      id: "evt-6",
+      version: 1,
       type: "RunnerHeartbeat",
-      runnerId: "runner-x",
-      activeRuns: 0,
-      maxConcurrentRuns: 1,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "RunnerHeartbeat",
+        runnerId: "runner-x",
+        activeRuns: 0,
+        maxConcurrentRuns: 1,
+      }
     });
 
     // Give the microtask queue a chance to process the async rejection.
@@ -106,24 +142,36 @@ describe("InProcessEventBus", () => {
 
   it("handles LogChunkReceived events with source field", () => {
     const chunks: string[] = [];
-    type LogChunk = Extract<RunnerDomainEvent, { type: "LogChunkReceived" }>;
-    bus.subscribe<LogChunk>("LogChunkReceived", (e) => chunks.push(`${e.source}:${e.chunk}`));
+    bus.subscribe("LogChunkReceived", (e) => chunks.push(`${e.payload.source}:${e.payload.chunk}`));
 
     bus.publish({
+      id: "evt-7",
+      version: 1,
       type: "LogChunkReceived",
-      runId: "run-6",
-      stageName: "test",
-      chunk: "hello stdout",
-      source: "stdout",
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "LogChunkReceived",
+        runId: "run-6",
+        stageName: "test",
+        chunk: "hello stdout",
+        source: "stdout",
+      }
     });
+    
     bus.publish({
+      id: "evt-8",
+      version: 1,
       type: "LogChunkReceived",
-      runId: "run-6",
-      stageName: "test",
-      chunk: "hello stderr",
-      source: "stderr",
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: "test",
+      payload: {
+        type: "LogChunkReceived",
+        runId: "run-6",
+        stageName: "test",
+        chunk: "hello stderr",
+        source: "stderr",
+      }
     });
 
     expect(chunks).toEqual(["stdout:hello stdout", "stderr:hello stderr"]);

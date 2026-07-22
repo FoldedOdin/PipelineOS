@@ -45,6 +45,10 @@ export function validateRunnerConfig(logger: Logger): void {
   logger.info("runner config validated");
 }
 
+export function getRunnerId(): string {
+  return requiredEnv("RUNNER_ID");
+}
+
 export function getRunnerWorkspaceRoot(): string {
   return optionalEnv("RUNNER_WORKSPACE_ROOT") ?? "/tmp/pipelineos-workspaces";
 }

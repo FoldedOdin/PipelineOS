@@ -13,13 +13,12 @@
 // Domain event union
 // ---------------------------------------------------------------------------
 
-export type RunnerDomainEvent =
+export type RunnerDomainEventPayload =
   | {
       type: "RunClaimed";
       runId: string;
       runnerId: string;
       pipelineId: string | null;
-      ts: Date;
     }
   | {
       type: "StageStarted";
@@ -27,7 +26,6 @@ export type RunnerDomainEvent =
       stageName: string;
       image: string;
       attempt: number;
-      ts: Date;
     }
   | {
       type: "StageFinished";
@@ -35,7 +33,6 @@ export type RunnerDomainEvent =
       stageName: string;
       exitCode: number;
       durationMs: number;
-      ts: Date;
     }
   | {
       type: "StageFailed";
@@ -44,14 +41,12 @@ export type RunnerDomainEvent =
       exitCode: number;
       attempt: number;
       maxAttempts: number;
-      ts: Date;
     }
   | {
       type: "StageTimedOut";
       runId: string;
       stageName: string;
       limitMs: number;
-      ts: Date;
     }
   | {
       type: "LogChunkReceived";
@@ -60,29 +55,37 @@ export type RunnerDomainEvent =
       /** UTF-8 text chunk (already secret-scrubbed). */
       chunk: string;
       source: "stdout" | "stderr";
-      ts: Date;
     }
   | {
       type: "RunFinished";
       runId: string;
       status: "success" | "failed";
       durationMs: number;
-      ts: Date;
     }
   | {
       type: "RunnerHeartbeat";
       runnerId: string;
       activeRuns: number;
       maxConcurrentRuns: number;
-      ts: Date;
     };
+
+export type RunnerDomainEvent = {
+  id: string; // UUID for event deduplication
+  version: 1;
+  type: RunnerDomainEventPayload["type"];
+  occurredAt: string; // ISO 8601 string
+  source: string; // e.g., "runner:{runnerId}" or "api"
+  payload: RunnerDomainEventPayload;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type EventHandler<T extends RunnerDomainEvent = RunnerDomainEvent> = (event: T) => any;
+export type EventHandler<T extends RunnerDomainEventPayload["type"] = RunnerDomainEventPayload["type"]> = (
+  event: RunnerDomainEvent & { type: T; payload: Extract<RunnerDomainEventPayload, { type: T }> },
+) => any;
 
 export interface IEventBus {
   /**
@@ -95,8 +98,5 @@ export interface IEventBus {
    * Subscribe a handler for events of a specific type.
    * Returns an unsubscribe function.
    */
-  subscribe<T extends RunnerDomainEvent>(
-    eventType: T["type"],
-    handler: EventHandler<T>,
-  ): () => void;
+  subscribe<T extends RunnerDomainEventPayload["type"]>(eventType: T, handler: EventHandler<T>): () => void;
 }

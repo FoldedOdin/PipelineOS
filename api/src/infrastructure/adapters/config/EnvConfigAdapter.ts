@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { IConfigAdapter, StorageCategory } from "../../../domain/index.js";
+import type { IConfigAdapter, StorageCategory, S3Config } from "../../../domain/index.js";
 
 export class EnvConfigAdapter implements IConfigAdapter {
   getDatabaseProvider(): "sqlite" | "mongodb" | "postgresql" {
@@ -57,5 +57,21 @@ export class EnvConfigAdapter implements IConfigAdapter {
 
   getNodeEnv(): string {
     return process.env.NODE_ENV ?? "development";
+  }
+
+  getS3Config(): S3Config | null {
+    if (this.getStorageType() !== "s3" && this.getStorageType() !== "minio") {
+      return null;
+    }
+    
+    return {
+      region: process.env.S3_REGION ?? "us-east-1",
+      bucket: process.env.S3_BUCKET ?? "pipelineos",
+      prefix: process.env.S3_PREFIX ?? "pipelineos",
+      endpoint: process.env.S3_ENDPOINT,
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? process.env.MINIO_ACCESS_KEY,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? process.env.MINIO_SECRET_KEY,
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true" || this.getStorageType() === "minio",
+    };
   }
 }

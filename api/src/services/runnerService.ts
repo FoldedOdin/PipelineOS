@@ -237,22 +237,14 @@ export const runnerService = {
     const index = stages.findIndex((s) => s.name === stageName);
     if (index < 0) return false;
 
-    const maxChunkChars = 16_384;
-    const maxStoredChars = 1_000_000;
-    const chunk = logs.length > maxChunkChars ? logs.slice(-maxChunkChars) : logs;
+    const chunk = logs;
 
-    let newLogs = `${stages[index].logs ?? ""}${chunk}`;
-    if (newLogs.length > maxStoredChars) {
-      newLogs = newLogs.slice(-maxStoredChars);
+    try {
+      await container.logStorage.appendLog(run.pipelineId, runId, stageName, chunk);
+    } catch (e) {
+      runnerServiceLogger.error({ err: e, runId, stageName }, "Failed to append logs to storage");
+      return false;
     }
-
-    stages[index] = {
-      ...stages[index],
-      logs: newLogs,
-    };
-
-    const updated = await container.persistence.runRepository.update(runId, { stages });
-    if (!updated) return false;
 
     publishStageLog(runId, stageName, chunk);
     return true;

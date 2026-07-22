@@ -9,7 +9,7 @@
  * swapped for a NATS or Redis Streams adapter behind the same IEventBus interface.
  */
 import { EventEmitter } from "node:events";
-import type { IEventBus, RunnerDomainEvent, EventHandler } from "./events.js";
+import type { IEventBus, RunnerDomainEvent, RunnerDomainEventPayload, EventHandler } from "./events.js";
 
 export class InProcessEventBus implements IEventBus {
   private readonly emitter = new EventEmitter();
@@ -24,12 +24,12 @@ export class InProcessEventBus implements IEventBus {
     this.emitter.emit(event.type, event);
   }
 
-  subscribe<T extends RunnerDomainEvent>(
-    eventType: T["type"],
+  subscribe<T extends RunnerDomainEventPayload["type"]>(
+    eventType: T,
     handler: EventHandler<T>,
   ): () => void {
     // Cast required because EventEmitter is untyped.
-    const listener = (event: T) => {
+    const listener = (event: Parameters<EventHandler<T>>[0]) => {
       void Promise.resolve(handler(event)).catch((err: unknown) => {
         // Swallow async handler errors — they must not crash the runner.
         console.error(`[InProcessEventBus] uncaught error in handler for "${eventType}":`, err);

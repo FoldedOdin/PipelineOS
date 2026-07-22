@@ -23,8 +23,9 @@ import {
   downloadCache,
 } from "./api-client.js";
 import { runContainer, StageTimeoutError } from "./container-runner.js";
-import { getDefaultTimeoutMs } from "./config.js";
+import { getDefaultTimeoutMs, getRunnerId } from "./config.js";
 import { eventBus } from "./InProcessEventBus.js";
+import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,7 +115,14 @@ export async function runStage(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await setStageStatus(runId, stageName, "running");
-    eventBus.publish({ type: "StageStarted", runId, stageName, image, attempt, ts: new Date() });
+    eventBus.publish({
+      id: randomUUID(),
+      version: 1,
+      type: "StageStarted",
+      occurredAt: new Date().toISOString(),
+      source: `runner:${getRunnerId()}`,
+      payload: { type: "StageStarted", runId, stageName, image, attempt }
+    });
 
     if (attempt > 1) {
       await appendLogs(
@@ -142,12 +150,26 @@ export async function runStage(
         onStdout: (chunk) => {
           const text = scrub(chunk.toString("utf8"));
           void appendLogs(runId, stageName, text);
-          eventBus.publish({ type: "LogChunkReceived", runId, stageName, chunk: text, source: "stdout", ts: new Date() });
+          eventBus.publish({
+            id: randomUUID(),
+            version: 1,
+            type: "LogChunkReceived",
+            occurredAt: new Date().toISOString(),
+            source: `runner:${getRunnerId()}`,
+            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stdout" }
+          });
         },
         onStderr: (chunk) => {
           const text = scrub(chunk.toString("utf8"));
           void appendLogs(runId, stageName, text);
-          eventBus.publish({ type: "LogChunkReceived", runId, stageName, chunk: text, source: "stderr", ts: new Date() });
+          eventBus.publish({
+            id: randomUUID(),
+            version: 1,
+            type: "LogChunkReceived",
+            occurredAt: new Date().toISOString(),
+            source: `runner:${getRunnerId()}`,
+            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stderr" }
+          });
         },
         logger,
         workspacePath,
@@ -158,7 +180,14 @@ export async function runStage(
       if (err instanceof StageTimeoutError) {
         await setStageStatus(runId, stageName, "failed", 124);
         await appendLogs(runId, stageName, `\n[pipelineos] ${err.message}\n`);
-        eventBus.publish({ type: "StageTimedOut", runId, stageName, limitMs: timeoutMs ?? 0, ts: new Date() });
+        eventBus.publish({
+          id: randomUUID(),
+          version: 1,
+          type: "StageTimedOut",
+          occurredAt: new Date().toISOString(),
+          source: `runner:${getRunnerId()}`,
+          payload: { type: "StageTimedOut", runId, stageName, limitMs: timeoutMs ?? 0 }
+        });
         throw err;
       }
       throw err;
@@ -185,12 +214,12 @@ export async function runStage(
     if (result.statusCode === 0) {
       await setStageStatus(runId, stageName, "success", 0);
       eventBus.publish({
+        id: randomUUID(),
+        version: 1,
         type: "StageFinished",
-        runId,
-        stageName,
-        exitCode: 0,
-        durationMs: Date.now() - wallStart,
-        ts: new Date(),
+        occurredAt: new Date().toISOString(),
+        source: `runner:${getRunnerId()}`,
+        payload: { type: "StageFinished", runId, stageName, exitCode: 0, durationMs: Date.now() - wallStart }
       });
 
       if (retryRule && attempt > 1) {
@@ -210,13 +239,12 @@ export async function runStage(
 
     await setStageStatus(runId, stageName, "failed", result.statusCode);
     eventBus.publish({
+      id: randomUUID(),
+      version: 1,
       type: "StageFailed",
-      runId,
-      stageName,
-      exitCode: result.statusCode,
-      attempt,
-      maxAttempts,
-      ts: new Date(),
+      occurredAt: new Date().toISOString(),
+      source: `runner:${getRunnerId()}`,
+      payload: { type: "StageFailed", runId, stageName, exitCode: result.statusCode, attempt, maxAttempts }
     });
 
     const diagnosis = await fetchDiagnosis(runId, stageName);

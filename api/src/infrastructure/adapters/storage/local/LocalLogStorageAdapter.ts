@@ -1,44 +1,35 @@
+import { createReadStream } from "node:fs";
+import type { Readable } from "node:stream";
 import fs from "node:fs/promises";
-import path from "node:path";
-import type { ILogStorageAdapter } from "../../../../domain/index.js";
+import { BaseLocalFileSystemStorage } from "./BaseLocalFileSystemStorage.js";
+import type { ILogStorageAdapter, LogRangeQuery } from "../../../../domain/interfaces/storage/ILogStorageAdapter.js";
 
-export class LocalLogStorageAdapter implements ILogStorageAdapter {
-  constructor(private readonly baseDir: string) {}
-
-  private getLogPath(runId: string, stageName: string): string {
-    return path.join(this.baseDir, "logs", `${runId}_${stageName}.log`);
+export class LocalLogStorageAdapter extends BaseLocalFileSystemStorage implements ILogStorageAdapter {
+  constructor(basePath: string) {
+    super(basePath);
   }
 
-  async append(runId: string, stageName: string, chunk: string): Promise<void> {
-    const fullPath = this.getLogPath(runId, stageName);
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.appendFile(fullPath, chunk, "utf-8");
+  async appendLog(pipelineId: string, runId: string, stageName: string, chunk: string): Promise<void> {
+    const filePath = this.getPath(pipelineId, runId, stageName, "stage.log");
+    await this.ensureDirectoryForFile(filePath);
+    await fs.appendFile(filePath, chunk, "utf-8");
   }
 
-  async read(runId: string, stageName: string): Promise<string> {
-    const fullPath = this.getLogPath(runId, stageName);
+  async getLogsStream(pipelineId: string, runId: string, stageName: string, range?: LogRangeQuery): Promise<Readable> {
+    const filePath = this.getPath(pipelineId, runId, stageName, "stage.log");
+    
     try {
-      return await fs.readFile(fullPath, "utf-8");
+      await fs.access(filePath);
     } catch {
-      return "";
+      throw new Error(`Log file not found: ${filePath}`);
     }
-  }
 
-  async delete(runId: string): Promise<boolean> {
-    const dir = path.join(this.baseDir, "logs");
-    try {
-      const files = await fs.readdir(dir);
-      const prefix = `${runId}_`;
-      let deletedAny = false;
-      for (const file of files) {
-        if (file.startsWith(prefix)) {
-          await fs.unlink(path.join(dir, file)).catch(() => undefined);
-          deletedAny = true;
-        }
-      }
-      return deletedAny;
-    } catch {
-      return false;
+    const options: any = { encoding: "utf-8" };
+    if (range) {
+      if (range.start !== undefined) options.start = range.start;
+      if (range.end !== undefined) options.end = range.end;
     }
+
+    return createReadStream(filePath, options);
   }
 }
