@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(process.cwd(), 'deploy/.env') });
 
 const secret = process.env.GITHUB_WEBHOOK_SECRET;
 const jwtSecret = process.env.JWT_SECRET ?? 'fallback_secret_do_not_use_in_prod';
+const internalApiKey = process.env.INTERNAL_API_KEY;
 const apiBase = 'http://localhost:3001';
 
 function generateJwt(username, secretKey) {
@@ -25,18 +26,57 @@ function generateJwt(username, secretKey) {
 }
 
 async function main() {
+  const commitSha = 'seed';
+  const pipelineId = 'foldedodin/PipelineOS';
+
+  // 1. Seed the mock pipeline config into the database
+  console.log('Seeding mock pipeline config...');
+  const seedRes = await fetch(`${apiBase}/internal/seed/pipelines`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-api-key': internalApiKey
+    },
+    body: JSON.stringify({
+      pipelineId,
+      rawYaml: `
+stages:
+  - name: build
+    image: alpine:latest
+    run: |
+      echo "=== BUILDING ==="
+      echo "Starting build stage..."
+      sleep 1
+      echo "Build completed successfully."
+  - name: test
+    image: alpine:latest
+    run: |
+      echo "=== TESTING ==="
+      echo "Running unit tests..."
+      sleep 1
+      echo "All tests passed!"
+`
+    })
+  });
+
+  if (!seedRes.ok) {
+    console.error('Failed to seed pipeline:', await seedRes.text());
+    process.exit(1);
+  }
+  console.log('Mock pipeline seeded successfully.');
+
+  // 2. Trigger the run via webhook
   const runPayload = JSON.stringify({
     ref: 'refs/heads/main',
-    after: '1234567890abcdef',
-    repository: { clone_url: 'https://github.com/foldedodin/PipelineOS.git' },
-    commits: [{ message: 'test stream', id: '1234567890abcdef' }]
+    after: commitSha,
+    repository: { clone_url: `https://github.com/${pipelineId}.git` },
+    commits: [{ message: 'test stream', id: commitSha }]
   });
 
   const hmac = crypto.createHmac('sha256', secret);
   const digest = hmac.update(runPayload).digest('hex');
   const signature = `sha256=${digest}`;
 
-  // Create a run via webhook
   console.log('Sending webhook request...');
   const res = await fetch(`${apiBase}/api/webhooks/github`, {
     method: 'POST',
@@ -57,7 +97,7 @@ async function main() {
   console.log('Webhook accepted:', webhookResult);
 
   // Since webhook returns 202 accepted and enqueues the job in BullMQ,
-  // we need to poll the API to find the newly created run or look for running runs.
+  // we need to poll the API to find the newly created run.
   console.log('Waiting for job queue to process webhook...');
   await new Promise((r) => setTimeout(r, 1500));
 
@@ -95,7 +135,11 @@ async function main() {
 
   es.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
-    console.log('SSE EVENT:', data.type, data.payload || data);
+    if (data.type === 'log') {
+      process.stdout.write(data.payload.chunk);
+    } else {
+      console.log('\n[SSE EVENT]', data.type, data.payload || data);
+    }
   };
 
   es.onerror = (err) => {
@@ -104,4 +148,5 @@ async function main() {
 }
 
 main().catch(console.error);
+
 
