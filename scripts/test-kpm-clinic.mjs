@@ -57,7 +57,10 @@ async function main() {
   const runPayload = JSON.stringify({
     ref: 'refs/heads/main',
     after: commitSha,
-    repository: { clone_url: `https://github.com/${pipelineId}.git` },
+    repository: {
+      clone_url: `https://github.com/${pipelineId}.git`,
+      full_name: pipelineId
+    },
     commits: [{ message: 'Local kpm-clinic test run', id: commitSha }]
   });
 
@@ -87,10 +90,16 @@ async function main() {
     headers: { Cookie: `token=${jwtToken}` }
   });
 
-  const runs = await runsRes.json();
+  const result = await runsRes.json();
+  const runs = result.items || [];
   const latestRun = runs[0];
+  if (!latestRun) {
+    console.error('No runs found in database.');
+    process.exit(1);
+  }
   const runId = latestRun._id || latestRun.id;
   console.log('Found Run ID:', runId);
+
 
   // 4. Connect to SSE to monitor logs in real-time
   console.log('Connecting to Event Stream...');
