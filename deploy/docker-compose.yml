@@ -48,7 +48,7 @@ services:
       - api
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /tmp/pipelineos-workspaces:/tmp/pipelineos-workspaces
+      - /tmp/pipelineos-workspaces:/tmp/pipelineos-workspaces:z
       - ./runner:/app:z
       - /app/node_modules
 
