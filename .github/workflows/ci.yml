@@ -1,4 +1,4 @@
-name: CI
+name: Code Quality CI (Phase 1)
 
 on:
   push:
@@ -7,50 +7,121 @@ on:
 
 jobs:
   api:
+    name: API Quality Check
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: api/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint Code (Zero Warnings)
+        run: npm run lint
+
+      - name: Prettier Format Check
+        run: npm run format:check
+
+      - name: Type Check & Build
+        run: npm run build
+
+      - name: Unit Tests & Coverage Report
+        run: npm run test:coverage
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-coverage-report
+          path: api/coverage/
 
   runner:
+    name: Runner Quality Check
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: runner
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: runner/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint Code (Zero Warnings)
+        run: npm run lint
+
+      - name: Prettier Format Check
+        run: npm run format:check
+
+      - name: Type Check & Build
+        run: npm run build
+
+      - name: Unit Tests & Coverage Report
+        run: npm run test:coverage
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runner-coverage-report
+          path: runner/coverage/
 
   frontend:
+    name: Frontend Quality Check
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint Code (Zero Warnings)
+        run: npm run lint
+
+      - name: Prettier Format Check
+        run: npm run format:check
+
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Unit Tests & Coverage Report
+        run: npm run test:coverage
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage/
