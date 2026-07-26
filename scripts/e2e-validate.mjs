@@ -1,7 +1,7 @@
 import { EventSource } from 'eventsource';
 import fetch from 'node-fetch';
 
-const apiBase = 'http://localhost:3000';
+const apiBase = 'http://localhost:3001';
 
 async function main() {
   // Create a run
