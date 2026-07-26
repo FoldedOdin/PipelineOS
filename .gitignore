@@ -14,3 +14,5 @@ blog/
 .*/
 docs/product-hardening-roadmap.md
 skills-lock.json
+*.pid
+data/
