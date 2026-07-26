@@ -46,11 +46,14 @@ services:
     env_file: ./deploy/.env
     depends_on:
       - api
+    environment:
+      - SSH_AUTH_SOCK=/run/user/1000/ssh-agent.socket
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/pipelineos-workspaces:/tmp/pipelineos-workspaces:z
       - ./runner:/app:z
       - /app/node_modules
+      - /run/user/1000/ssh-agent.socket:/run/user/1000/ssh-agent.socket:z
 
   frontend:
     build:
