@@ -64,9 +64,7 @@ describe("claimNextRun", () => {
 
   it("returns null and logs on non-2xx", async () => {
     const warn = vi.fn();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("error", { status: 500 }),
-    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("error", { status: 500 }));
     const { claimNextRun } = await import("./api-client.js");
     const result = await claimNextRun({ warn, debug: vi.fn() } as never);
     expect(result).toBeNull();

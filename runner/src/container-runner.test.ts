@@ -61,6 +61,7 @@ describe("container-runner: runContainer", () => {
     vi.doMock("./config.js", () => ({
       getContainerMemoryLimitBytes: () => null,
       getContainerNanoCpus: () => null,
+      getRunnerId: () => "test-runner",
       getRunnerWorkspaceRoot: () => "/tmp",
       getRetainWorkspaceOnFailure: () => false,
       getDefaultTimeoutMs: () => null,
@@ -78,6 +79,7 @@ describe("container-runner: runContainer", () => {
       workspacePath: null,
       stageName: "test",
       timeoutMs: null,
+      runId: "test-run",
     });
 
     // demuxStream should be called instead of stream.pipe
@@ -93,6 +95,7 @@ describe("container-runner: runContainer", () => {
     vi.doMock("./config.js", () => ({
       getContainerMemoryLimitBytes: () => 512 * 1024 * 1024,
       getContainerNanoCpus: () => 1_000_000_000,
+      getRunnerId: () => "test-runner",
       getRunnerWorkspaceRoot: () => "/tmp",
       getRetainWorkspaceOnFailure: () => false,
       getDefaultTimeoutMs: () => null,
@@ -110,6 +113,7 @@ describe("container-runner: runContainer", () => {
       workspacePath: null,
       stageName: "test",
       timeoutMs: null,
+      runId: "test-run",
     });
 
     const createArgs = mockDockerInstance.createContainer.mock.calls[0]?.[0] as Record<
@@ -138,6 +142,7 @@ describe("container-runner: runContainer", () => {
     vi.doMock("./config.js", () => ({
       getContainerMemoryLimitBytes: () => null,
       getContainerNanoCpus: () => null,
+      getRunnerId: () => "test-runner",
       getRunnerWorkspaceRoot: () => "/tmp",
       getRetainWorkspaceOnFailure: () => false,
       getDefaultTimeoutMs: () => null,
@@ -155,7 +160,8 @@ describe("container-runner: runContainer", () => {
         logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
         workspacePath: null,
         stageName: "slow-stage",
-        timeoutMs: 50, // 50ms timeout in test
+        timeoutMs: 50,
+      runId: "test-run", // 50ms timeout in test
       }),
     ).rejects.toThrow(StageTimeoutError);
 
@@ -171,6 +177,7 @@ describe("container-runner: runContainer", () => {
     vi.doMock("./config.js", () => ({
       getContainerMemoryLimitBytes: () => null,
       getContainerNanoCpus: () => null,
+      getRunnerId: () => "test-runner",
       getRunnerWorkspaceRoot: () => "/tmp",
       getRetainWorkspaceOnFailure: () => false,
       getDefaultTimeoutMs: () => null,
@@ -188,6 +195,7 @@ describe("container-runner: runContainer", () => {
       workspacePath: null,
       stageName: "cleanup-test",
       timeoutMs: null,
+      runId: "test-run",
     });
 
     expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
@@ -202,6 +210,7 @@ describe("container-runner: runContainer", () => {
     vi.doMock("./config.js", () => ({
       getContainerMemoryLimitBytes: () => null,
       getContainerNanoCpus: () => null,
+      getRunnerId: () => "test-runner",
       getRunnerWorkspaceRoot: () => "/tmp",
       getRetainWorkspaceOnFailure: () => false,
       getDefaultTimeoutMs: () => null,
@@ -219,6 +228,7 @@ describe("container-runner: runContainer", () => {
       workspacePath: "/tmp/workspaces/run-42",
       stageName: "ls-test",
       timeoutMs: null,
+      runId: "test-run",
     });
 
     const createArgs = mockDockerInstance.createContainer.mock.calls[0]?.[0] as Record<
@@ -226,6 +236,8 @@ describe("container-runner: runContainer", () => {
       unknown
     >;
     const hostConfig = createArgs?.HostConfig as Record<string, unknown>;
-    expect((hostConfig?.Binds as string[])?.some((b: string) => b.includes("/workspace"))).toBe(true);
+    expect((hostConfig?.Binds as string[])?.some((b: string) => b.includes("/workspace"))).toBe(
+      true,
+    );
   });
 });

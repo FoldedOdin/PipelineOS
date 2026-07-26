@@ -63,6 +63,31 @@ export type RunnerDomainEventPayload =
       durationMs: number;
     }
   | {
+      type: "StageMetricsUpdated";
+      runId: string;
+      stageName: string;
+      cpuPercent: number;
+      memoryBytes: number;
+      memoryLimitBytes: number;
+      networkRx: number;
+      networkTx: number;
+      blockRead: number;
+      blockWrite: number;
+    }
+  | {
+      type: "StageTimelineUpdated";
+      runId: string;
+      stageName: string;
+      status: "Queued" | "Preparing" | "Pulling Image" | "Starting Container" | "Running" | "Succeeded" | "Failed" | "Timed Out" | "Cancelled";
+    }
+  | {
+      type: "ArtifactUploaded";
+      runId: string;
+      stageName: string;
+      fileName: string;
+      sizeBytes: number;
+    }
+  | {
       type: "RunnerHeartbeat";
       runnerId: string;
       activeRuns: number;
@@ -82,8 +107,9 @@ export type RunnerDomainEvent = {
 // Interface
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type EventHandler<T extends RunnerDomainEventPayload["type"] = RunnerDomainEventPayload["type"]> = (
+export type EventHandler<
+  T extends RunnerDomainEventPayload["type"] = RunnerDomainEventPayload["type"],
+> = (
   event: RunnerDomainEvent & { type: T; payload: Extract<RunnerDomainEventPayload, { type: T }> },
 ) => any;
 
@@ -98,5 +124,13 @@ export interface IEventBus {
    * Subscribe a handler for events of a specific type.
    * Returns an unsubscribe function.
    */
-  subscribe<T extends RunnerDomainEventPayload["type"]>(eventType: T, handler: EventHandler<T>): () => void;
+  subscribe<T extends RunnerDomainEventPayload["type"]>(
+    eventType: T,
+    handler: EventHandler<T>,
+  ): () => void;
+  /**
+   * Subscribe a handler for all events.
+   * Returns an unsubscribe function.
+   */
+  subscribeAll(handler: (event: RunnerDomainEvent) => any): () => void;
 }

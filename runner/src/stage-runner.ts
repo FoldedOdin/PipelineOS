@@ -35,6 +35,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function publishTimeline(runId: string, stageName: string, status: "Queued" | "Preparing" | "Pulling Image" | "Starting Container" | "Running" | "Succeeded" | "Failed" | "Timed Out" | "Cancelled") {
+  eventBus.publish({
+    id: randomUUID(),
+    version: 1,
+    type: "StageTimelineUpdated",
+    occurredAt: new Date().toISOString(),
+    source: `runner:${getRunnerId()}`,
+    payload: {
+      type: "StageTimelineUpdated",
+      runId,
+      stageName,
+      status,
+    },
+  });
+}
+
 function buildScrubber(secrets: Record<string, string>): (text: string) => string {
   const secretValues = Object.values(secrets).filter((s) => s.length > 0);
   return (text: string) => {
@@ -93,11 +109,15 @@ export async function runStage(
   const command = `sh -lc ${JSON.stringify(stage.run)}`;
   const scrub = buildScrubber(secrets);
 
+  publishTimeline(runId, stageName, "Queued");
+
   await upsertStage(runId, stageName, { image, command });
 
   const applicable = pipelineId
     ? rules.filter((r) => ruleMatches(r, { pipelineId, stageName, diagnosis: null }))
-    : rules.filter((r) => r.enabled && (r.match.stageName === null || r.match.stageName === stageName));
+    : rules.filter(
+        (r) => r.enabled && (r.match.stageName === null || r.match.stageName === stageName),
+      );
 
   const retryRule = applicable[0] ?? null;
   const maxAttempts = retryRule
@@ -109,9 +129,7 @@ export async function runStage(
 
   // Resolve timeout: stage-level → env default → null (no timeout)
   const timeoutMs =
-    stage.timeout_minutes != null
-      ? stage.timeout_minutes * 60_000
-      : getDefaultTimeoutMs();
+    stage.timeout_minutes != null ? stage.timeout_minutes * 60_000 : getDefaultTimeoutMs();
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await setStageStatus(runId, stageName, "running");
@@ -121,7 +139,7 @@ export async function runStage(
       type: "StageStarted",
       occurredAt: new Date().toISOString(),
       source: `runner:${getRunnerId()}`,
-      payload: { type: "StageStarted", runId, stageName, image, attempt }
+      payload: { type: "StageStarted", runId, stageName, image, attempt },
     });
 
     if (attempt > 1) {
@@ -136,10 +154,13 @@ export async function runStage(
     }
 
     if (attempt === 1 && workspacePath && stage.cache) {
+      publishTimeline(runId, stageName, "Preparing");
       await downloadCache(stage.cache.key, workspacePath, logger);
     }
 
     const wallStart = Date.now();
+    
+    publishTimeline(runId, stageName, "Pulling Image"); // runContainer ensures image then starts
 
     let result: Awaited<ReturnType<typeof runContainer>>;
     try {
@@ -148,6 +169,7 @@ export async function runStage(
         cmd,
         env: { ...secrets, ...stage.env },
         onStdout: (chunk) => {
+          publishTimeline(runId, stageName, "Running"); // 1st byte means running
           const text = scrub(chunk.toString("utf8"));
           void appendLogs(runId, stageName, text);
           eventBus.publish({
@@ -156,10 +178,11 @@ export async function runStage(
             type: "LogChunkReceived",
             occurredAt: new Date().toISOString(),
             source: `runner:${getRunnerId()}`,
-            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stdout" }
+            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stdout" },
           });
         },
         onStderr: (chunk) => {
+          publishTimeline(runId, stageName, "Running"); // 1st byte means running
           const text = scrub(chunk.toString("utf8"));
           void appendLogs(runId, stageName, text);
           eventBus.publish({
@@ -168,16 +191,18 @@ export async function runStage(
             type: "LogChunkReceived",
             occurredAt: new Date().toISOString(),
             source: `runner:${getRunnerId()}`,
-            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stderr" }
+            payload: { type: "LogChunkReceived", runId, stageName, chunk: text, source: "stderr" },
           });
         },
         logger,
         workspacePath,
         stageName,
         timeoutMs,
+        runId,
       });
     } catch (err) {
       if (err instanceof StageTimeoutError) {
+        publishTimeline(runId, stageName, "Timed Out");
         await setStageStatus(runId, stageName, "failed", 124);
         await appendLogs(runId, stageName, `\n[pipelineos] ${err.message}\n`);
         eventBus.publish({
@@ -186,7 +211,7 @@ export async function runStage(
           type: "StageTimedOut",
           occurredAt: new Date().toISOString(),
           source: `runner:${getRunnerId()}`,
-          payload: { type: "StageTimedOut", runId, stageName, limitMs: timeoutMs ?? 0 }
+          payload: { type: "StageTimedOut", runId, stageName, limitMs: timeoutMs ?? 0 },
         });
         throw err;
       }
@@ -212,6 +237,7 @@ export async function runStage(
     }).catch(() => undefined);
 
     if (result.statusCode === 0) {
+      publishTimeline(runId, stageName, "Succeeded");
       await setStageStatus(runId, stageName, "success", 0);
       eventBus.publish({
         id: randomUUID(),
@@ -219,7 +245,13 @@ export async function runStage(
         type: "StageFinished",
         occurredAt: new Date().toISOString(),
         source: `runner:${getRunnerId()}`,
-        payload: { type: "StageFinished", runId, stageName, exitCode: 0, durationMs: Date.now() - wallStart }
+        payload: {
+          type: "StageFinished",
+          runId,
+          stageName,
+          exitCode: 0,
+          durationMs: Date.now() - wallStart,
+        },
       });
 
       if (retryRule && attempt > 1) {
@@ -229,6 +261,16 @@ export async function runStage(
       if (workspacePath) {
         if (stage.artifacts && stage.artifacts.length > 0) {
           await uploadArtifacts(runId, stageName, stage.artifacts, workspacePath, logger);
+          for (const art of stage.artifacts) {
+            eventBus.publish({
+              id: randomUUID(),
+              version: 1,
+              type: "ArtifactUploaded",
+              occurredAt: new Date().toISOString(),
+              source: `runner:${getRunnerId()}`,
+              payload: { type: "ArtifactUploaded", runId, stageName, fileName: art, sizeBytes: 0 },
+            });
+          }
         }
         if (stage.cache && stage.cache.paths.length > 0) {
           await uploadCache(stage.cache.key, stage.cache.paths, workspacePath, logger);
@@ -237,6 +279,7 @@ export async function runStage(
       return;
     }
 
+    publishTimeline(runId, stageName, "Failed");
     await setStageStatus(runId, stageName, "failed", result.statusCode);
     eventBus.publish({
       id: randomUUID(),
@@ -244,7 +287,14 @@ export async function runStage(
       type: "StageFailed",
       occurredAt: new Date().toISOString(),
       source: `runner:${getRunnerId()}`,
-      payload: { type: "StageFailed", runId, stageName, exitCode: result.statusCode, attempt, maxAttempts }
+      payload: {
+        type: "StageFailed",
+        runId,
+        stageName,
+        exitCode: result.statusCode,
+        attempt,
+        maxAttempts,
+      },
     });
 
     const diagnosis = await fetchDiagnosis(runId, stageName);

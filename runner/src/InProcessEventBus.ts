@@ -9,7 +9,12 @@
  * swapped for a NATS or Redis Streams adapter behind the same IEventBus interface.
  */
 import { EventEmitter } from "node:events";
-import type { IEventBus, RunnerDomainEvent, RunnerDomainEventPayload, EventHandler } from "./events.js";
+import type {
+  IEventBus,
+  RunnerDomainEvent,
+  RunnerDomainEventPayload,
+  EventHandler,
+} from "./events.js";
 
 export class InProcessEventBus implements IEventBus {
   private readonly emitter = new EventEmitter();
@@ -22,6 +27,7 @@ export class InProcessEventBus implements IEventBus {
 
   publish(event: RunnerDomainEvent): void {
     this.emitter.emit(event.type, event);
+    this.emitter.emit("*", event);
   }
 
   subscribe<T extends RunnerDomainEventPayload["type"]>(
@@ -39,6 +45,18 @@ export class InProcessEventBus implements IEventBus {
     this.emitter.on(eventType, listener as (...args: unknown[]) => void);
     return () => {
       this.emitter.off(eventType, listener as (...args: unknown[]) => void);
+    };
+  }
+
+  subscribeAll(handler: (event: RunnerDomainEvent) => any): () => void {
+    const listener = (event: RunnerDomainEvent) => {
+      void Promise.resolve(handler(event)).catch((err: unknown) => {
+        console.error(`[InProcessEventBus] uncaught error in subscribeAll handler:`, err);
+      });
+    };
+    this.emitter.on("*", listener);
+    return () => {
+      this.emitter.off("*", listener);
     };
   }
 }

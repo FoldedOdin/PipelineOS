@@ -13,10 +13,9 @@
 import { PassThrough } from "node:stream";
 import type { Logger } from "pino";
 import { createDockerClient } from "./docker.js";
-import {
-  getContainerMemoryLimitBytes,
-  getContainerNanoCpus,
-} from "./config.js";
+import { getContainerMemoryLimitBytes, getContainerNanoCpus, getRunnerId } from "./config.js";
+import { eventBus } from "./InProcessEventBus.js";
+import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -46,6 +45,8 @@ export interface ContainerRunInput {
   stageName: string;
   /** Milliseconds before the container is killed. `null` = no timeout. */
   timeoutMs: number | null;
+  /** Run ID to tag events with */
+  runId: string;
 }
 
 export interface ContainerResult {
@@ -108,7 +109,54 @@ function computeCpuPercent(sample: unknown): number | null {
   return (cpuDelta / systemDelta) * onlineCpus * 100;
 }
 
-type DockerContainer = Awaited<ReturnType<ReturnType<typeof createDockerClient>["createContainer"]>>;
+function computeNetworkStats(sample: unknown): { rx: number; tx: number } {
+  if (typeof sample !== "object" || sample === null) return { rx: 0, tx: 0 };
+  const s = sample as Record<string, unknown>;
+  const networks =
+    typeof s.networks === "object" && s.networks !== null
+      ? (s.networks as Record<string, Record<string, unknown>>)
+      : null;
+  if (!networks) return { rx: 0, tx: 0 };
+
+  let rx = 0;
+  let tx = 0;
+  for (const net of Object.values(networks)) {
+    if (typeof net.rx_bytes === "number") rx += net.rx_bytes;
+    if (typeof net.tx_bytes === "number") tx += net.tx_bytes;
+  }
+  return { rx, tx };
+}
+
+function computeBlockIo(sample: unknown): { read: number; write: number } {
+  if (typeof sample !== "object" || sample === null) return { read: 0, write: 0 };
+  const s = sample as Record<string, unknown>;
+  const blkio =
+    typeof s.blkio_stats === "object" && s.blkio_stats !== null
+      ? (s.blkio_stats as Record<string, unknown>)
+      : null;
+  if (!blkio) return { read: 0, write: 0 };
+
+  const ioServiceBytes = Array.isArray(blkio.io_service_bytes_recursive)
+    ? blkio.io_service_bytes_recursive
+    : [];
+
+  let read = 0;
+  let write = 0;
+  for (const item of ioServiceBytes) {
+    if (typeof item !== "object" || item === null) continue;
+    const stat = item as { op?: string; value?: number };
+    if (stat.op && stat.op.toLowerCase() === "read" && typeof stat.value === "number") {
+      read += stat.value;
+    } else if (stat.op && stat.op.toLowerCase() === "write" && typeof stat.value === "number") {
+      write += stat.value;
+    }
+  }
+  return { read, write };
+}
+
+type DockerContainer = Awaited<
+  ReturnType<ReturnType<typeof createDockerClient>["createContainer"]>
+>;
 
 // ---------------------------------------------------------------------------
 // Image management
@@ -149,7 +197,8 @@ export async function ensureImage(
       docker.modem.followProgress(
         stream,
         (pullErr: unknown) => {
-          if (pullErr) reject(pullErr instanceof Error ? pullErr : new Error(unknownToMessage(pullErr)));
+          if (pullErr)
+            reject(pullErr instanceof Error ? pullErr : new Error(unknownToMessage(pullErr)));
           else resolve();
         },
         (event: unknown) => {
@@ -159,7 +208,10 @@ export async function ensureImage(
             "status" in event &&
             typeof (event as Record<string, unknown>).status === "string"
           ) {
-            logger.debug({ image, status: (event as Record<string, unknown>).status }, "pull progress");
+            logger.debug(
+              { image, status: (event as Record<string, unknown>).status },
+              "pull progress",
+            );
           }
         },
       );
@@ -211,9 +263,7 @@ export async function runContainer(input: ContainerRunInput): Promise<ContainerR
     HostConfig: {
       ...(memLimit !== null ? { Memory: memLimit } : {}),
       ...(nanoCpus !== null ? { NanoCpus: nanoCpus } : {}),
-      ...(input.workspacePath
-        ? { Binds: [`${input.workspacePath}:/workspace`] }
-        : {}),
+      ...(input.workspacePath ? { Binds: [`${input.workspacePath}:/workspace`] } : {}),
     },
     ...(input.workspacePath ? { WorkingDir: "/workspace" } : {}),
   });
@@ -234,6 +284,20 @@ export async function runContainer(input: ContainerRunInput): Promise<ContainerR
     });
     stderrPass.on("data", (chunk: Buffer) => {
       input.onStderr(chunk);
+    });
+
+    eventBus.publish({
+      id: randomUUID(),
+      version: 1,
+      type: "StageTimelineUpdated",
+      occurredAt: new Date().toISOString(),
+      source: `runner:${getRunnerId()}`,
+      payload: {
+        type: "StageTimelineUpdated",
+        runId: input.runId,
+        stageName: input.stageName,
+        status: "Starting Container",
+      },
     });
 
     await container.start();
@@ -285,6 +349,29 @@ export async function runContainer(input: ContainerRunInput): Promise<ContainerR
           lastCpuTotal = totalUsage;
         }
 
+        const netStats = computeNetworkStats(raw);
+        const blkStats = computeBlockIo(raw);
+
+        eventBus.publish({
+          id: randomUUID(),
+          version: 1,
+          type: "StageMetricsUpdated",
+          occurredAt: new Date().toISOString(),
+          source: `runner:${getRunnerId()}`,
+          payload: {
+            type: "StageMetricsUpdated",
+            runId: input.runId,
+            stageName: input.stageName,
+            cpuPercent: cpuPct ?? 0,
+            memoryBytes: (typeof usage === "number" && Number.isFinite(usage)) ? usage : 0,
+            memoryLimitBytes: memLimit ?? 0,
+            networkRx: netStats.rx,
+            networkTx: netStats.tx,
+            blockRead: blkStats.read,
+            blockWrite: blkStats.write,
+          },
+        });
+
         samples += 1;
       } catch (err) {
         input.logger.debug({ err }, "stats poll failed");
@@ -294,7 +381,7 @@ export async function runContainer(input: ContainerRunInput): Promise<ContainerR
     await poll();
     const pollTimer = setInterval(() => {
       void poll();
-    }, 2000);
+    }, 1000);
 
     // Wait for container with optional timeout enforcement.
     let statusCode: number;

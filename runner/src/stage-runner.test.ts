@@ -55,7 +55,10 @@ describe("runStage — success path", () => {
       }),
       StageTimeoutError: class StageTimeoutError extends Error {},
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => null, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => null,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
     await runStage(noLogger, "run-1", baseStage, [], "pipe-1", null, {});
@@ -91,13 +94,16 @@ describe("runStage — failure path (no retry rules)", () => {
       }),
       StageTimeoutError: class StageTimeoutError extends Error {},
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => null, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => null,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
 
-    await expect(
-      runStage(noLogger, "run-2", baseStage, [], "pipe-1", null, {}),
-    ).rejects.toThrow("failed with exit code 1");
+    await expect(runStage(noLogger, "run-2", baseStage, [], "pipe-1", null, {})).rejects.toThrow(
+      "failed with exit code 1",
+    );
 
     expect(setStageStatus).toHaveBeenCalledWith("run-2", "build", "failed", 1);
   });
@@ -134,7 +140,10 @@ describe("runStage — retry until success", () => {
       }),
       StageTimeoutError: class StageTimeoutError extends Error {},
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => null, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => null,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
 
@@ -184,7 +193,10 @@ describe("runStage — max retries exceeded", () => {
       }),
       StageTimeoutError: class StageTimeoutError extends Error {},
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => null, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => null,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
 
@@ -226,7 +238,10 @@ describe("runStage — timeout", () => {
       runContainer: vi.fn().mockRejectedValue(new StageTimeoutError()),
       StageTimeoutError,
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => 100, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => 100,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
 
@@ -256,11 +271,21 @@ describe("runStage — secret scrubbing", () => {
     vi.doMock("./container-runner.js", () => ({
       runContainer: vi.fn().mockImplementation(async (input: { onStdout: (b: Buffer) => void }) => {
         input.onStdout(Buffer.from(`echo ${SECRET} done`));
-        return { statusCode: 0, cpuSeconds: null, cpuPercentAvg: null, cpuPercentMax: null, memBytesMax: null, memBytesAvg: null };
+        return {
+          statusCode: 0,
+          cpuSeconds: null,
+          cpuPercentAvg: null,
+          cpuPercentMax: null,
+          memBytesMax: null,
+          memBytesAvg: null,
+        };
       }),
       StageTimeoutError: class StageTimeoutError extends Error {},
     }));
-    vi.doMock("./config.js", () => ({ getDefaultTimeoutMs: () => null, getRunnerId: () => "runner-123" }));
+    vi.doMock("./config.js", () => ({
+      getDefaultTimeoutMs: () => null,
+      getRunnerId: () => "runner-123",
+    }));
 
     const { runStage } = await import("./stage-runner.js");
     await runStage(noLogger, "run-6", baseStage, [], "pipe-1", null, { MY_SECRET: SECRET });

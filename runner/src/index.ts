@@ -4,6 +4,9 @@ import { pino } from "pino";
 import type { Logger } from "pino";
 import { executeQueuedRun, pingRunnerHeartbeat, killAllActiveContainers } from "./executor.js";
 import { validateRunnerConfig } from "./config.js";
+import { eventBus } from "./InProcessEventBus.js";
+import type { RunnerDomainEvent } from "./events.js";
+import { postEventsBatch } from "./api-client.js";
 
 function createRunnerLogger(): Logger {
   return pino({
@@ -26,8 +29,27 @@ async function main(): Promise<void> {
   await pingRunnerHeartbeat(logger, 0, maxConcurrentRuns);
   logger.info({ intervalMs, maxConcurrentRuns }, "runner started; polling loop active");
 
+  const eventBatch: RunnerDomainEvent[] = [];
+  eventBus.subscribeAll((event) => {
+    // Only forward certain events? Actually we can forward everything.
+    // However, LogChunkReceived could be huge. We already forward logs via appendLogs.
+    // Let's filter out LogChunkReceived to avoid massive payloads, unless PIP-35 needs it.
+    // The instructions say: "Stream log output, artifact availability...". Logs might need to go through SSE.
+    // Wait, log stream is handled separately, but let's forward it here too for the new EventStream.
+    eventBatch.push(event);
+  });
+
   const intervalId = setInterval(() => {
     if (shuttingDown) return;
+
+    // Flush events
+    if (eventBatch.length > 0) {
+      const batchToPost = [...eventBatch];
+      eventBatch.length = 0;
+      postEventsBatch(batchToPost, logger).catch(err => {
+        logger.error({ err }, "failed to post events batch");
+      });
+    }
 
     // Keep registration fresh on every tick.
     void pingRunnerHeartbeat(logger, inFlightPromises.size, maxConcurrentRuns);

@@ -8,6 +8,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Logger } from "pino";
+import type { RunnerDomainEvent } from "./events.js";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -60,7 +61,9 @@ function requiredEnv(name: string): string {
 }
 
 function looksLikePlaceholder(value: string): boolean {
-  return value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here";
+  return (
+    value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here"
+  );
 }
 
 function isHeaderTupleArray(value: unknown): value is [string, string][] {
@@ -68,7 +71,10 @@ function isHeaderTupleArray(value: unknown): value is [string, string][] {
     Array.isArray(value) &&
     value.every(
       (entry) =>
-        Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string" && typeof entry[1] === "string",
+        Array.isArray(entry) &&
+        entry.length === 2 &&
+        typeof entry[0] === "string" &&
+        typeof entry[1] === "string",
     )
   );
 }
@@ -149,6 +155,25 @@ export async function setRunStatus(runId: string, status: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// Events bulk export
+// ---------------------------------------------------------------------------
+
+export async function postEventsBatch(
+  events: RunnerDomainEvent[],
+  logger: Logger,
+): Promise<void> {
+  if (events.length === 0) return;
+  const res = await apiFetch(`/internal/events`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ events }),
+  });
+  if (!res.ok) {
+    logger.warn({ status: res.status, body: await res.text() }, "failed to post events batch");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Stage lifecycle
 // ---------------------------------------------------------------------------
 
@@ -185,7 +210,11 @@ export async function appendLogs(runId: string, stageName: string, logs: string)
   });
 }
 
-export async function postStageMetrics(runId: string, stageName: string, metrics: StageMetrics): Promise<void> {
+export async function postStageMetrics(
+  runId: string,
+  stageName: string,
+  metrics: StageMetrics,
+): Promise<void> {
   await apiFetch(`/internal/runs/${runId}/stages/${encodeURIComponent(stageName)}/metrics`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -208,12 +237,17 @@ export async function fetchPipelineYaml(
   );
   if (res.status === 404) return null;
   if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch pipeline yaml");
+    logger.warn(
+      { status: res.status, body: await res.text(), pipelineId },
+      "failed to fetch pipeline yaml",
+    );
     return null;
   }
   const data: unknown = await res.json();
   const rawYaml =
-    typeof data === "object" && data !== null ? (data as Record<string, unknown>).rawYaml : undefined;
+    typeof data === "object" && data !== null
+      ? (data as Record<string, unknown>).rawYaml
+      : undefined;
   return typeof rawYaml === "string" ? rawYaml : null;
 }
 
@@ -221,11 +255,17 @@ export async function fetchRemediationRules(
   pipelineId: string,
   logger: Logger,
 ): Promise<RemediationRule[]> {
-  const res = await apiFetch(`/internal/remediation/rules?pipelineId=${encodeURIComponent(pipelineId)}`, {
-    method: "GET",
-  });
+  const res = await apiFetch(
+    `/internal/remediation/rules?pipelineId=${encodeURIComponent(pipelineId)}`,
+    {
+      method: "GET",
+    },
+  );
   if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), pipelineId }, "failed to fetch remediation rules");
+    logger.warn(
+      { status: res.status, body: await res.text(), pipelineId },
+      "failed to fetch remediation rules",
+    );
     return [];
   }
   const json: unknown = await res.json();
@@ -243,7 +283,9 @@ export async function fetchRemediationRules(
     const match =
       typeof o.match === "object" && o.match !== null ? (o.match as Record<string, unknown>) : {};
     const action =
-      typeof o.action === "object" && o.action !== null ? (o.action as Record<string, unknown>) : null;
+      typeof o.action === "object" && o.action !== null
+        ? (o.action as Record<string, unknown>)
+        : null;
     if (!id || action === null) continue;
     if (action.type !== "retry_stage") continue;
     const maxAttempts = typeof action.maxAttempts === "number" ? action.maxAttempts : 2;
@@ -296,7 +338,9 @@ export async function fetchDiagnosis(
   if (typeof json !== "object" || json === null) return null;
   const o = json as Record<string, unknown>;
   const summary = typeof o.summary === "string" ? o.summary : "";
-  const hints = Array.isArray(o.hints) ? o.hints.filter((v): v is string => typeof v === "string") : [];
+  const hints = Array.isArray(o.hints)
+    ? o.hints.filter((v): v is string => typeof v === "string")
+    : [];
   const patterns = Array.isArray(o.patterns)
     ? o.patterns.filter((v): v is string => typeof v === "string")
     : [];
@@ -308,16 +352,16 @@ export async function recordRuleOutcome(
   outcome: "attempt" | "save" | "failure",
   logger: Logger,
 ): Promise<void> {
-  const res = await apiFetch(
-    `/internal/remediation/rules/${encodeURIComponent(ruleId)}/outcomes`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ outcome }),
-    },
-  );
+  const res = await apiFetch(`/internal/remediation/rules/${encodeURIComponent(ruleId)}/outcomes`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ outcome }),
+  });
   if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text(), ruleId, outcome }, "failed to record rule outcome");
+    logger.warn(
+      { status: res.status, body: await res.text(), ruleId, outcome },
+      "failed to record rule outcome",
+    );
   }
 }
 
@@ -346,7 +390,7 @@ export async function uploadArtifacts(
         method: "POST",
         headers: { "content-type": "application/gzip" },
         body: buf,
-      }
+      },
     );
     if (!res.ok) {
       logger.warn({ status: res.status, body: await res.text() }, "failed to upload artifacts");
