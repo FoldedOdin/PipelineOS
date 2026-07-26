@@ -30,8 +30,18 @@ export async function prepareWorkspace(
     logger.info({ runId, repoUrl }, "Cloning repository");
     // Secure fetch: shallow clone for a specific commit.
     // We init an empty repo, fetch the specific sha, and checkout.
-    // Setting GIT_TERMINAL_PROMPT=0 prevents interactive prompt hangs on private repos.
-    const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+    const env = {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no"
+    };
+
+    // Automatically rewrite HTTPS URLs to SSH for github.com inside the container
+    try {
+      await execFileAsync("git", ["config", "--global", "url.git@github.com:.insteadOf", "https://github.com/"], { env });
+    } catch {
+      // ignore config errors
+    }
 
     await execFileAsync("git", ["init"], { cwd: workspacePath, env });
     await execFileAsync("git", ["remote", "add", "origin", repoUrl], { cwd: workspacePath, env });
