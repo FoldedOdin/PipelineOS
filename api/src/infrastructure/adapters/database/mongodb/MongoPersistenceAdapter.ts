@@ -41,10 +41,14 @@ export class MongoPersistenceAdapter implements IPersistenceAdapter {
   readonly runRepository: IRunRepository = new MongoRunRepository();
   readonly stageRepository: IStageRepository = new MongoStageRepository();
   readonly pipelineRepository: IPipelineRepository = new MongoPipelineRepository();
-  readonly remediationRuleRepository: IRemediationRuleRepository = new MongoRemediationRuleRepository();
-  readonly runnerRegistrationRepository: IRunnerRegistrationRepository = new MongoRunnerRegistrationRepository();
-  readonly stageFlakinessRepository: IStageFlakinessRepository = new MongoStageFlakinessRepository();
-  readonly webhookDeliveryRepository: IWebhookDeliveryRepository = new MongoWebhookDeliveryRepository();
+  readonly remediationRuleRepository: IRemediationRuleRepository =
+    new MongoRemediationRuleRepository();
+  readonly runnerRegistrationRepository: IRunnerRegistrationRepository =
+    new MongoRunnerRegistrationRepository();
+  readonly stageFlakinessRepository: IStageFlakinessRepository =
+    new MongoStageFlakinessRepository();
+  readonly webhookDeliveryRepository: IWebhookDeliveryRepository =
+    new MongoWebhookDeliveryRepository();
   readonly artifactRepository: IArtifactRepository = new MongoArtifactRepository();
 
   async connect(logger?: unknown): Promise<void> {
@@ -54,7 +58,12 @@ export class MongoPersistenceAdapter implements IPersistenceAdapter {
     }
     mongoose.set("strictQuery", true);
     await mongoose.connect(uri);
-    if (logger && typeof logger === "object" && "info" in logger && typeof (logger as { info: unknown }).info === "function") {
+    if (
+      logger &&
+      typeof logger === "object" &&
+      "info" in logger &&
+      typeof (logger as { info: unknown }).info === "function"
+    ) {
       (logger as { info: (msg: string) => void }).info("connected to MongoDB");
     }
   }

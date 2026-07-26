@@ -48,13 +48,15 @@ export class SqliteStageFlakinessRepository implements IStageFlakinessRepository
       }
 
       this.db
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO stage_flakiness_records (id, pipeline_id, stage_name, outcomes_json, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT(pipeline_id, stage_name) DO UPDATE SET
             outcomes_json = excluded.outcomes_json,
             updated_at = excluded.updated_at
-        `)
+        `,
+        )
         .run(id, input.pipelineId, input.stageName, JSON.stringify(outcomes), createdAtStr, nowStr);
     });
 
@@ -68,7 +70,10 @@ export class SqliteStageFlakinessRepository implements IStageFlakinessRepository
     return rows.map((r) => SqliteStageFlakinessMapper.toDTO(r));
   }
 
-  async findByPipelineAndStage(pipelineId: string, stageName: string): Promise<StageFlakinessRecordDTO | null> {
+  async findByPipelineAndStage(
+    pipelineId: string,
+    stageName: string,
+  ): Promise<StageFlakinessRecordDTO | null> {
     const row = this.db
       .prepare("SELECT * FROM stage_flakiness_records WHERE pipeline_id = ? AND stage_name = ?")
       .get(pipelineId, stageName) as SqliteStageFlakinessRow | undefined;
@@ -77,7 +82,9 @@ export class SqliteStageFlakinessRepository implements IStageFlakinessRepository
 
   async findByPipeline(pipelineId: string): Promise<StageFlakinessRecordDTO[]> {
     const rows = this.db
-      .prepare("SELECT * FROM stage_flakiness_records WHERE pipeline_id = ? ORDER BY stage_name ASC")
+      .prepare(
+        "SELECT * FROM stage_flakiness_records WHERE pipeline_id = ? ORDER BY stage_name ASC",
+      )
       .all(pipelineId) as SqliteStageFlakinessRow[];
     return rows.map((r) => SqliteStageFlakinessMapper.toDTO(r));
   }

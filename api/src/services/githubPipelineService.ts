@@ -15,11 +15,7 @@ function requiredEnv(name: string): string {
 }
 
 function base64UrlEncode(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
+  return buf.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
 function jsonB64Url(payload: unknown): string {
@@ -59,15 +55,18 @@ async function getInstallationAccessToken(logger: Logger): Promise<string> {
   const installationId = requiredEnv("GITHUB_APP_INSTALLATION_ID");
   const jwt = createGithubAppJwt(Math.floor(Date.now() / 1000));
 
-  const res = await fetch(`https://api.github.com/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "pipelineos-api",
+  const res = await fetch(
+    `https://api.github.com/app/installations/${encodeURIComponent(installationId)}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "pipelineos-api",
+      },
     },
-  });
+  );
 
   if (!res.ok) {
     const body = await res.text();
@@ -76,8 +75,10 @@ async function getInstallationAccessToken(logger: Logger): Promise<string> {
   }
 
   const json: unknown = await res.json();
-  const token = typeof json === "object" && json !== null ? (json as Record<string, unknown>).token : undefined;
-  if (typeof token !== "string" || token === "") throw new Error("github_installation_token_missing");
+  const token =
+    typeof json === "object" && json !== null ? (json as Record<string, unknown>).token : undefined;
+  if (typeof token !== "string" || token === "")
+    throw new Error("github_installation_token_missing");
   return token;
 }
 
@@ -108,18 +109,27 @@ export async function fetchPipelineYamlFromGithub(input: {
   if (res.status === 404) throw new Error("pipeline_yaml_not_found");
   if (!res.ok) {
     const body = await res.text();
-    logger.warn({ status: res.status, body, pipelineId }, "failed to fetch pipeline yaml from github");
+    logger.warn(
+      { status: res.status, body, pipelineId },
+      "failed to fetch pipeline yaml from github",
+    );
     throw new Error("github_contents_fetch_failed");
   }
 
   const json: unknown = await res.json();
-  const content = typeof json === "object" && json !== null ? (json as Record<string, unknown>).content : undefined;
-  const encoding = typeof json === "object" && json !== null ? (json as Record<string, unknown>).encoding : undefined;
-  if (typeof content !== "string" || typeof encoding !== "string") throw new Error("github_contents_invalid_response");
+  const content =
+    typeof json === "object" && json !== null
+      ? (json as Record<string, unknown>).content
+      : undefined;
+  const encoding =
+    typeof json === "object" && json !== null
+      ? (json as Record<string, unknown>).encoding
+      : undefined;
+  if (typeof content !== "string" || typeof encoding !== "string")
+    throw new Error("github_contents_invalid_response");
   if (encoding !== "base64") throw new Error(`unsupported github encoding: ${encoding}`);
 
   const raw = Buffer.from(content.replaceAll("\n", ""), "base64").toString("utf8");
   if (raw.trim() === "") throw new Error("pipeline_yaml_empty");
   return raw;
 }
-

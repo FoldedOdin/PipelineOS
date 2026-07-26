@@ -40,7 +40,10 @@ runsRouter.get("/api/runs/:id/stream", handleSseStream);
 
 runsRouter.post("/api/runs/:id/replay", async (req, res, next) => {
   try {
-    const body = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>) : {};
+    const body =
+      typeof req.body === "object" && req.body !== null
+        ? (req.body as Record<string, unknown>)
+        : {};
     const triggeredBy = typeof body.triggeredBy === "string" ? body.triggeredBy : undefined;
     const replay = await runService.replayRun(req.params.id, { triggeredBy });
     if (replay === null) {

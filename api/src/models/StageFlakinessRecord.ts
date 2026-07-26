@@ -24,4 +24,7 @@ export type StageFlakinessRecordDocument = mongoose.HydratedDocument<
   mongoose.InferSchemaType<typeof stageFlakinessRecordSchema>
 >;
 
-export const StageFlakinessRecord = mongoose.model("StageFlakinessRecord", stageFlakinessRecordSchema);
+export const StageFlakinessRecord = mongoose.model(
+  "StageFlakinessRecord",
+  stageFlakinessRecordSchema,
+);

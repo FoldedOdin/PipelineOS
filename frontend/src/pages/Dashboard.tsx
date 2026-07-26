@@ -40,11 +40,15 @@ export default function Dashboard(): ReactElement {
 
   const [flakiness, setFlakiness] = useState<FlakinessScore[] | undefined>(undefined);
   const [heatmapDays, setHeatmapDays] = useState<string[]>([]);
-  const [heatmapStages, setHeatmapStages] = useState<{ stageName: string; cells: (number | null)[] }[]>([]);
+  const [heatmapStages, setHeatmapStages] = useState<
+    { stageName: string; cells: (number | null)[] }[]
+  >([]);
   const [trend, setTrend] = useState<FailureTrendPoint[]>([]);
   const [stageCosts, setStageCosts] = useState<StageCostAggregate[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [health, setHealth] = useState<{ status: string; services: { mongo: string; api: string } } | undefined>(undefined);
+  const [health, setHealth] = useState<
+    { status: string; services: { mongo: string; api: string } } | undefined
+  >(undefined);
   const [pipelineIds, setPipelines] = useState<string[]>([]);
 
   useEffect(() => {
@@ -73,9 +77,12 @@ export default function Dashboard(): ReactElement {
         apiGetJson(`/api/analytics/flakiness-heatmap?pipelineId=${encoded}&days=7`),
         apiGetJson(`/api/analytics/failure-trends?days=14`),
         apiGetJson(`/api/analytics/stage-costs?pipelineId=${encoded}&days=14&limit=10`),
-        apiGetJson(`/health`).catch(() => ({ status: "down", services: { mongo: "unknown", api: "down" } })),
+        apiGetJson(`/health`).catch(() => ({
+          status: "down",
+          services: { mongo: "unknown", api: "down" },
+        })),
       ]);
-      
+
       setHealth(healthRaw as { status: string; services: { mongo: string; api: string } });
 
       const scores: FlakinessScore[] = [];
@@ -99,7 +106,9 @@ export default function Dashboard(): ReactElement {
 
       if (typeof heatRaw === "object" && heatRaw !== null) {
         const h = heatRaw as Record<string, unknown>;
-        const days = Array.isArray(h.days) ? h.days.filter((d): d is string => typeof d === "string") : [];
+        const days = Array.isArray(h.days)
+          ? h.days.filter((d): d is string => typeof d === "string")
+          : [];
         const stages: { stageName: string; cells: (number | null)[] }[] = [];
         if (Array.isArray(h.stages)) {
           for (const s of h.stages) {
@@ -194,24 +203,42 @@ export default function Dashboard(): ReactElement {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">Intelligence dashboard</h2>
-          <p className="text-sm text-slate-400">Flakiness scores, heatmap (per stage × day), and run failure trends.</p>
+          <p className="text-sm text-slate-400">
+            Flakiness scores, heatmap (per stage × day), and run failure trends.
+          </p>
         </div>
         <div className="flex items-center gap-4">
           {health && (
             <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-1.5 text-xs text-slate-300">
               <span className="font-semibold text-slate-100">System Health:</span>
-              <span className={`flex items-center gap-1 ${health.services.api === "up" ? "text-emerald-400" : "text-rose-400"}`}>
-                <span className={`h-2 w-2 rounded-full ${health.services.api === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> API
+              <span
+                className={`flex items-center gap-1 ${health.services.api === "up" ? "text-emerald-400" : "text-rose-400"}`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${health.services.api === "up" ? "bg-emerald-500" : "bg-rose-500"}`}
+                />{" "}
+                API
               </span>
-              <span className={`flex items-center gap-1 ${health.services.mongo === "up" ? "text-emerald-400" : "text-rose-400"}`}>
-                <span className={`h-2 w-2 rounded-full ${health.services.mongo === "up" ? "bg-emerald-500" : "bg-rose-500"}`} /> Mongo
+              <span
+                className={`flex items-center gap-1 ${health.services.mongo === "up" ? "text-emerald-400" : "text-rose-400"}`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${health.services.mongo === "up" ? "bg-emerald-500" : "bg-rose-500"}`}
+                />{" "}
+                Mongo
               </span>
             </div>
           )}
-          <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runners">
+          <Link
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800"
+            to="/runners"
+          >
             Runners
           </Link>
-          <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runs">
+          <Link
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800"
+            to="/runs"
+          >
             Runs
           </Link>
         </div>
@@ -255,7 +282,9 @@ export default function Dashboard(): ReactElement {
       </div>
 
       {error !== undefined ? (
-        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-100">{error}</div>
+        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-100">
+          {error}
+        </div>
       ) : null}
 
       {pipelineId === "" ? (
@@ -267,7 +296,9 @@ export default function Dashboard(): ReactElement {
             {flakiness === undefined ? (
               <p className="text-sm text-slate-500">Loading…</p>
             ) : flakiness.length === 0 ? (
-              <p className="text-sm text-slate-500">No stage outcomes yet. Complete runs to populate scores.</p>
+              <p className="text-sm text-slate-500">
+                No stage outcomes yet. Complete runs to populate scores.
+              </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-800">
                 <table className="min-w-full text-left text-sm text-slate-200">
@@ -283,11 +314,15 @@ export default function Dashboard(): ReactElement {
                     {flakiness.map((row) => (
                       <tr key={row.stageName} className="border-t border-slate-800">
                         <td className="px-3 py-2 font-mono text-white">{row.stageName}</td>
-                        <td className="px-3 py-2 font-mono text-slate-400">{String(row.windowSize)}</td>
+                        <td className="px-3 py-2 font-mono text-slate-400">
+                          {String(row.windowSize)}
+                        </td>
                         <td className="px-3 py-2 font-mono text-slate-400">
                           {String(row.passes)} / {String(row.fails)}
                         </td>
-                        <td className="px-3 py-2 font-mono text-amber-200">{row.flakeScore.toFixed(3)}</td>
+                        <td className="px-3 py-2 font-mono text-amber-200">
+                          {row.flakeScore.toFixed(3)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -309,7 +344,10 @@ export default function Dashboard(): ReactElement {
                         Stage
                       </th>
                       {heatmapDays.map((d) => (
-                        <th key={d} className="border-b border-slate-800 px-1 py-2 text-center text-slate-500">
+                        <th
+                          key={d}
+                          className="border-b border-slate-800 px-1 py-2 text-center text-slate-500"
+                        >
                           {d.slice(5)}
                         </th>
                       ))}
@@ -322,7 +360,10 @@ export default function Dashboard(): ReactElement {
                           {row.stageName}
                         </td>
                         {row.cells.map((cell, i) => (
-                          <td key={`${row.stageName}-${heatmapDays[i] ?? i}`} className="border-t border-slate-800 p-0.5">
+                          <td
+                            key={`${row.stageName}-${heatmapDays[i] ?? i}`}
+                            className="border-t border-slate-800 p-0.5"
+                          >
                             <div
                               className={`h-8 w-8 rounded ${heatmapColor(cell)}`}
                               title={cell === null ? "no data" : `flake ${cell.toFixed(2)}`}
@@ -336,14 +377,17 @@ export default function Dashboard(): ReactElement {
               </div>
             )}
             <p className="text-xs text-slate-500">
-              Deeper red = higher mixed pass/fail rate that day. Green = stable. Empty = no terminal outcomes.
+              Deeper red = higher mixed pass/fail rate that day. Green = stable. Empty = no terminal
+              outcomes.
             </p>
           </section>
         </>
       )}
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-slate-200">Failure trend (all pipelines, last 14 days)</h3>
+        <h3 className="text-sm font-semibold text-slate-200">
+          Failure trend (all pipelines, last 14 days)
+        </h3>
         {trend.length === 0 ? (
           <p className="text-sm text-slate-500">No completed runs in range.</p>
         ) : (
@@ -372,7 +416,9 @@ export default function Dashboard(): ReactElement {
           {stageCosts === undefined ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : stageCosts.length === 0 ? (
-            <p className="text-sm text-slate-500">No cost metrics recorded yet. Run pipelines to populate stage costs.</p>
+            <p className="text-sm text-slate-500">
+              No cost metrics recorded yet. Run pipelines to populate stage costs.
+            </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-800">
               <table className="min-w-full text-left text-sm text-slate-200">
@@ -390,9 +436,15 @@ export default function Dashboard(): ReactElement {
                     <tr key={row.stageName} className="border-t border-slate-800">
                       <td className="px-3 py-2 font-mono text-white">{row.stageName}</td>
                       <td className="px-3 py-2 font-mono text-slate-400">{String(row.runs)}</td>
-                      <td className="px-3 py-2 font-mono text-amber-200">${row.totalCostUsd.toFixed(4)}</td>
-                      <td className="px-3 py-2 font-mono text-slate-300">${row.avgCostUsd.toFixed(4)}</td>
-                      <td className="px-3 py-2 font-mono text-slate-300">${row.maxCostUsd.toFixed(4)}</td>
+                      <td className="px-3 py-2 font-mono text-amber-200">
+                        ${row.totalCostUsd.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-300">
+                        ${row.avgCostUsd.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-300">
+                        ${row.maxCostUsd.toFixed(4)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -400,7 +452,8 @@ export default function Dashboard(): ReactElement {
             </div>
           )}
           <p className="text-xs text-slate-500">
-            Estimated cost uses runner env pricing (`COST_CPU_USD_PER_CPU_SECOND`, `COST_MEM_USD_PER_GB_SECOND`). Defaults to 0 until configured.
+            Estimated cost uses runner env pricing (`COST_CPU_USD_PER_CPU_SECOND`,
+            `COST_MEM_USD_PER_GB_SECOND`). Defaults to 0 until configured.
           </p>
         </section>
       ) : null}

@@ -3,7 +3,11 @@ import type { IRunnerRegistration } from "../../../../../models/RunnerRegistrati
 
 export class RunnerRegistrationMapper {
   static toDTO(doc: IRunnerRegistration): RunnerRegistrationDTO {
-    const docAny = doc as unknown as { _id?: { toString(): string }; createdAt?: Date; updatedAt?: Date };
+    const docAny = doc as unknown as {
+      _id?: { toString(): string };
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       id: docAny._id?.toString() ?? doc.runnerId,
       runnerId: doc.runnerId,

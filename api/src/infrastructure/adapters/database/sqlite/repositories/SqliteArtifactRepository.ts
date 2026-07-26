@@ -14,7 +14,9 @@ export class SqliteArtifactRepository implements IArtifactRepository {
   }
 
   async findById(id: string): Promise<ArtifactDTO | null> {
-    const row = this.db.prepare("SELECT * FROM artifacts WHERE id = ?").get(id) as SqliteArtifactRow | undefined;
+    const row = this.db.prepare("SELECT * FROM artifacts WHERE id = ?").get(id) as
+      | SqliteArtifactRow
+      | undefined;
     return row ? SqliteArtifactMapper.toDTO(row) : null;
   }
 
@@ -26,15 +28,28 @@ export class SqliteArtifactRepository implements IArtifactRepository {
   }
 
   async create(input: CreateArtifactInput): Promise<ArtifactDTO> {
-    const id = (input as { id?: string }).id ?? `artifact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const id =
+      (input as { id?: string }).id ??
+      `artifact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const nowStr = new Date().toISOString();
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO artifacts (id, run_id, stage_name, name, size_bytes, content_type, storage_path, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(id, input.runId, input.stageName, input.name, input.sizeBytes, input.contentType, input.storagePath, nowStr);
+      `,
+      )
+      .run(
+        id,
+        input.runId,
+        input.stageName,
+        input.name,
+        input.sizeBytes,
+        input.contentType,
+        input.storagePath,
+        nowStr,
+      );
 
     const created = await this.findById(id);
     if (!created) {

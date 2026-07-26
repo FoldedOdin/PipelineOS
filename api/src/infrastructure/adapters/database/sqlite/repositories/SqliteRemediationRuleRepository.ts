@@ -15,22 +15,30 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
   }
 
   async findById(ruleId: string): Promise<RemediationRuleDTO | null> {
-    const row = this.db.prepare("SELECT * FROM remediation_rules WHERE id = ?").get(ruleId) as SqliteRemediationRuleRow | undefined;
+    const row = this.db.prepare("SELECT * FROM remediation_rules WHERE id = ?").get(ruleId) as
+      | SqliteRemediationRuleRow
+      | undefined;
     return row ? SqliteRemediationRuleMapper.toDTO(row) : null;
   }
 
   async findActive(): Promise<RemediationRuleDTO[]> {
-    const rows = this.db.prepare("SELECT * FROM remediation_rules WHERE enabled = 1").all() as SqliteRemediationRuleRow[];
+    const rows = this.db
+      .prepare("SELECT * FROM remediation_rules WHERE enabled = 1")
+      .all() as SqliteRemediationRuleRow[];
     return rows.map((r) => SqliteRemediationRuleMapper.toDTO(r));
   }
 
   async findAll(): Promise<RemediationRuleDTO[]> {
-    const rows = this.db.prepare("SELECT * FROM remediation_rules").all() as SqliteRemediationRuleRow[];
+    const rows = this.db
+      .prepare("SELECT * FROM remediation_rules")
+      .all() as SqliteRemediationRuleRow[];
     return rows.map((r) => SqliteRemediationRuleMapper.toDTO(r));
   }
 
   async create(input: CreateRemediationRuleInput): Promise<RemediationRuleDTO> {
-    const id = (input as { id?: string }).id ?? `rule_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const id =
+      (input as { id?: string }).id ??
+      `rule_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const now = new Date();
     const dto: RemediationRuleDTO = {
       id,
@@ -65,11 +73,13 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
 
     const row = SqliteRemediationRuleMapper.toRow(dto);
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO remediation_rules (
           id, enabled, name, pipeline_id, stage_name, match_json, action_json, auto_json, stats_json, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(
         row.id,
         row.enabled,
@@ -81,7 +91,7 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
         row.auto_json,
         row.stats_json,
         row.created_at,
-        row.updated_at
+        row.updated_at,
       );
 
     const created = await this.findById(id);
@@ -91,7 +101,10 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
     return created;
   }
 
-  async update(ruleId: string, updates: UpdateRemediationRuleInput): Promise<RemediationRuleDTO | null> {
+  async update(
+    ruleId: string,
+    updates: UpdateRemediationRuleInput,
+  ): Promise<RemediationRuleDTO | null> {
     const existing = await this.findById(ruleId);
     if (!existing) return null;
 
@@ -103,8 +116,14 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
         ? {
             ...existing.match,
             ...updates.match,
-            anyPatterns: updates.match.anyPatterns !== undefined ? updates.match.anyPatterns : existing.match.anyPatterns,
-            anyHintSubstrings: updates.match.anyHintSubstrings !== undefined ? updates.match.anyHintSubstrings : existing.match.anyHintSubstrings,
+            anyPatterns:
+              updates.match.anyPatterns !== undefined
+                ? updates.match.anyPatterns
+                : existing.match.anyPatterns,
+            anyHintSubstrings:
+              updates.match.anyHintSubstrings !== undefined
+                ? updates.match.anyHintSubstrings
+                : existing.match.anyHintSubstrings,
           }
         : existing.match,
       action: updates.action
@@ -130,11 +149,13 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
 
     const row = SqliteRemediationRuleMapper.toRow(updatedDTO);
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE remediation_rules
         SET enabled = ?, name = ?, pipeline_id = ?, stage_name = ?, match_json = ?, action_json = ?, auto_json = ?, stats_json = ?, updated_at = ?
         WHERE id = ?
-      `)
+      `,
+      )
       .run(
         row.enabled,
         row.name,
@@ -145,7 +166,7 @@ export class SqliteRemediationRuleRepository implements IRemediationRuleReposito
         row.auto_json,
         row.stats_json,
         row.updated_at,
-        ruleId
+        ruleId,
       );
 
     return this.findById(ruleId);

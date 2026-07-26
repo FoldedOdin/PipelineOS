@@ -3,7 +3,10 @@ import type {
   RunnerRegistrationDTO,
   RegisterOrHeartbeatInput,
 } from "../../../../../domain/index.js";
-import { RunnerRegistration, type IRunnerRegistration } from "../../../../../models/RunnerRegistration.js";
+import {
+  RunnerRegistration,
+  type IRunnerRegistration,
+} from "../../../../../models/RunnerRegistration.js";
 import { RunnerRegistrationMapper } from "../mappers/index.js";
 
 export class MongoRunnerRegistrationRepository implements IRunnerRegistrationRepository {
@@ -32,7 +35,7 @@ export class MongoRunnerRegistrationRepository implements IRunnerRegistrationRep
           maxConcurrentRuns: input.maxConcurrentRuns,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     ).exec();
     return RunnerRegistrationMapper.toDTO(doc as unknown as IRunnerRegistration);
   }

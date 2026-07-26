@@ -60,7 +60,9 @@ describe("analytics routes", () => {
   it("passes stage cost filters through to the service", async () => {
     const app = createApp(createSilentLogger());
 
-    await request(app).get("/api/analytics/stage-costs?pipelineId=owner/repo&days=3&limit=5").expect(200);
+    await request(app)
+      .get("/api/analytics/stage-costs?pipelineId=owner/repo&days=3&limit=5")
+      .expect(200);
 
     expect(mocks.topStageCosts).toHaveBeenCalledWith({
       pipelineId: "owner/repo",

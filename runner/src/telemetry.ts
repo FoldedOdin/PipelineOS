@@ -12,7 +12,8 @@ const sdk = new NodeSDK({
 sdk.start();
 
 process.on("SIGTERM", () => {
-  void sdk.shutdown()
+  void sdk
+    .shutdown()
     .then(() => {
       console.log("OTel terminated");
     })

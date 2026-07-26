@@ -3,14 +3,19 @@ import { prepareWorkspace, cleanWorkspace } from "./workspace.js";
 import type { Logger } from "pino";
 
 vi.mock("node:child_process", () => ({
-  execFile: (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, res: { stdout: string; stderr: string }) => void) => {
+  execFile: (
+    _cmd: string,
+    _args: string[],
+    _opts: unknown,
+    cb: (err: Error | null, res: { stdout: string; stderr: string }) => void,
+  ) => {
     cb(null, { stdout: "", stderr: "" });
-  }
+  },
 }));
 
 vi.mock("node:fs/promises", () => ({
   mkdir: async () => Promise.resolve(),
-  rm: async () => Promise.resolve()
+  rm: async () => Promise.resolve(),
 }));
 
 const dummyLogger = {

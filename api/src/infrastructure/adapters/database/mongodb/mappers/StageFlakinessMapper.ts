@@ -3,7 +3,11 @@ import type { StageFlakinessRecordDocument } from "../../../../../models/StageFl
 
 export class StageFlakinessMapper {
   static toDTO(doc: StageFlakinessRecordDocument): StageFlakinessRecordDTO {
-    const docAny = doc as unknown as { _id?: { toString(): string }; createdAt?: Date; updatedAt?: Date };
+    const docAny = doc as unknown as {
+      _id?: { toString(): string };
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       id: docAny._id?.toString() ?? `${doc.pipelineId}_${doc.stageName}`,
       pipelineId: doc.pipelineId,

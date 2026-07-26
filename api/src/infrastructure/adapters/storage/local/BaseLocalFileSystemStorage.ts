@@ -1,7 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 
-
 export class BaseLocalFileSystemStorage {
   protected basePath: string;
 
@@ -21,7 +20,12 @@ export class BaseLocalFileSystemStorage {
    * e.g. /data/logs/pipelineId/runId/stageName.log
    * or /data/artifacts/pipelineId/runId/stageName/fileName
    */
-  protected getPath(pipelineId: string, runId: string, stageName: string, fileName: string): string {
+  protected getPath(
+    pipelineId: string,
+    runId: string,
+    stageName: string,
+    fileName: string,
+  ): string {
     return path.join(this.basePath, pipelineId, runId, stageName, fileName);
   }
 

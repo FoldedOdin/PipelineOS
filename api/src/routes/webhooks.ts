@@ -16,18 +16,25 @@ const githubWebhookLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-webhooksRouter.post("/api/webhooks/github", githubWebhookLimiter, validateGithubWebhook, (req, res) => {
-  const event = req.header("x-github-event");
-  if (event !== "push" && event !== "pull_request") {
-    res.status(202).json({ status: "ignored", event: event ?? "unknown" });
-    return;
-  }
+webhooksRouter.post(
+  "/api/webhooks/github",
+  githubWebhookLimiter,
+  validateGithubWebhook,
+  (req, res) => {
+    const event = req.header("x-github-event");
+    if (event !== "push" && event !== "pull_request") {
+      res.status(202).json({ status: "ignored", event: event ?? "unknown" });
+      return;
+    }
 
-  const deliveryId = req.header("x-github-delivery") ?? undefined;
-  void enqueueGithubWebhookJob({ event, deliveryId, body: req.body as unknown }).catch((err: unknown) => {
-    req.log.error({ err }, "failed to enqueue github webhook job");
-  });
+    const deliveryId = req.header("x-github-delivery") ?? undefined;
+    void enqueueGithubWebhookJob({ event, deliveryId, body: req.body as unknown }).catch(
+      (err: unknown) => {
+        req.log.error({ err }, "failed to enqueue github webhook job");
+      },
+    );
 
-  // Return quickly to stay within GitHub webhook time limits.
-  res.status(202).json({ status: "accepted" });
-});
+    // Return quickly to stay within GitHub webhook time limits.
+    res.status(202).json({ status: "accepted" });
+  },
+);

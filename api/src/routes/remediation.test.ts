@@ -51,7 +51,11 @@ describe("remediation routes", () => {
   it("rejects invalid rule payloads", async () => {
     const app = createApp(createSilentLogger());
 
-    await request(app).post("/internal/remediation/rules").set("x-internal-api-key", "internal_test_key").send({}).expect(400);
+    await request(app)
+      .post("/internal/remediation/rules")
+      .set("x-internal-api-key", "internal_test_key")
+      .send({})
+      .expect(400);
   });
 
   it("rejects invalid remediation outcomes", async () => {

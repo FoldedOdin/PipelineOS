@@ -39,7 +39,8 @@ export class SqliteRemediationRuleMapper {
       auto: {
         enabled: Boolean(auto.enabled),
         minAttempts: typeof auto.minAttempts === "number" ? auto.minAttempts : 10,
-        disableBelowSuccessRate: typeof auto.disableBelowSuccessRate === "number" ? auto.disableBelowSuccessRate : 0.2,
+        disableBelowSuccessRate:
+          typeof auto.disableBelowSuccessRate === "number" ? auto.disableBelowSuccessRate : 0.2,
       },
       stats: {
         attempts: typeof stats.attempts === "number" ? stats.attempts : 0,

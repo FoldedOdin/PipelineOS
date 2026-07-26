@@ -17,4 +17,3 @@ export interface PipelineDefinition {
   on: PipelineTrigger[];
   stages: PipelineStage[];
 }
-

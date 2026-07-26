@@ -46,7 +46,11 @@ describe("POST /api/webhooks/github", () => {
 
     expect(res.status).toBe(202);
     expect(mocks.enqueueGithubWebhookJob).toHaveBeenCalledTimes(1);
-    expect(mocks.enqueueGithubWebhookJob).toHaveBeenCalledWith({ event: "push", deliveryId: "delivery-1", body: payload });
+    expect(mocks.enqueueGithubWebhookJob).toHaveBeenCalledWith({
+      event: "push",
+      deliveryId: "delivery-1",
+      body: payload,
+    });
   });
 
   it("ignores unsupported events", async () => {
@@ -66,4 +70,3 @@ describe("POST /api/webhooks/github", () => {
     expect(mocks.enqueueGithubWebhookJob).not.toHaveBeenCalled();
   });
 });
-

@@ -35,7 +35,9 @@ export class SqliteRunnerRegistrationMapper {
     return {
       id: dto.id,
       runner_id: dto.runnerId,
-      last_heartbeat_at: dto.lastHeartbeatAt ? dto.lastHeartbeatAt.toISOString() : new Date().toISOString(),
+      last_heartbeat_at: dto.lastHeartbeatAt
+        ? dto.lastHeartbeatAt.toISOString()
+        : new Date().toISOString(),
       status: dto.status,
       version: dto.version ?? null,
       hostname: dto.hostname ?? null,

@@ -44,10 +44,10 @@ class ApplicationContainer implements IApplicationContainer {
       this.persistence = new SqlitePersistenceAdapter(this.config);
     }
     this.storage = new LocalStorageAdapter(this.config.getStorageDirectory());
-    
+
     const storageType = this.config.getStorageType();
     const s3Config = this.config.getS3Config();
-    
+
     if ((storageType === "s3" || storageType === "minio") && s3Config) {
       this.logStorage = new S3LogStorageAdapter(
         s3Config.region,
@@ -57,7 +57,7 @@ class ApplicationContainer implements IApplicationContainer {
         s3Config.accessKeyId && s3Config.secretAccessKey
           ? { accessKeyId: s3Config.accessKeyId, secretAccessKey: s3Config.secretAccessKey }
           : undefined,
-        s3Config.forcePathStyle
+        s3Config.forcePathStyle,
       );
       this.artifactStorage = new S3ArtifactStorageAdapter(
         s3Config.region,
@@ -67,7 +67,7 @@ class ApplicationContainer implements IApplicationContainer {
         s3Config.accessKeyId && s3Config.secretAccessKey
           ? { accessKeyId: s3Config.accessKeyId, secretAccessKey: s3Config.secretAccessKey }
           : undefined,
-        s3Config.forcePathStyle
+        s3Config.forcePathStyle,
       );
     } else {
       this.logStorage = new LocalLogStorageAdapter(this.config.getLogsDirectory());
@@ -79,4 +79,3 @@ class ApplicationContainer implements IApplicationContainer {
 }
 
 export const container: IApplicationContainer = new ApplicationContainer();
-

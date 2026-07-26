@@ -16,7 +16,10 @@ describe("CORS middleware", () => {
   it("allows the local frontend origin to call the API", async () => {
     const app = createApp(createSilentLogger());
 
-    const res = await request(app).get("/health").set("origin", "http://localhost:3000").expect(200);
+    const res = await request(app)
+      .get("/health")
+      .set("origin", "http://localhost:3000")
+      .expect(200);
 
     expect(res.header["access-control-allow-origin"]).toBe("http://localhost:3000");
     expect(res.header.vary).toContain("Origin");

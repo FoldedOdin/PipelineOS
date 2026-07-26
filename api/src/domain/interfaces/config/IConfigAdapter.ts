@@ -1,4 +1,10 @@
-export type StorageCategory = "database" | "logs" | "artifacts" | "cache" | "workspaces" | "uploads";
+export type StorageCategory =
+  | "database"
+  | "logs"
+  | "artifacts"
+  | "cache"
+  | "workspaces"
+  | "uploads";
 
 export interface S3Config {
   region: string;

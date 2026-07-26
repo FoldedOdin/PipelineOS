@@ -37,7 +37,9 @@ export function createApp(logger: Logger): express.Express {
     pinoHttp({
       logger,
       // Lazily evaluate requestId after requestIdMiddleware has attached it
-      customProps: (req) => ({ requestId: (req as unknown as { requestId?: string }).requestId ?? "unknown" }),
+      customProps: (req) => ({
+        requestId: (req as unknown as { requestId?: string }).requestId ?? "unknown",
+      }),
       // Don't generate id eagerly before middleware runs
       genReqId: (req) => (req as unknown as { requestId?: string }).requestId ?? "unknown",
       autoLogging: false,
@@ -57,14 +59,14 @@ export function createApp(logger: Logger): express.Express {
   app.use(webhooksRouter);
   app.use(runnerRouter); // internal endpoints
   app.use(seedRouter); // seed endpoint
-  
+
   app.use("/api/auth", authRouter);
-  
+
   // Protect all other /api/* routes
   app.use("/api", (req, res, next) => {
     requireAuth(req, res, next);
   });
-  
+
   app.use(analyticsRouter);
   app.use(remediationRouter);
   app.use(runsRouter);

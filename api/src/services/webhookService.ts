@@ -71,7 +71,10 @@ export async function processGithubWebhookEvent(input: {
       return;
     }
   } else {
-    logger.warn({ event, pipelineId }, "missing x-github-delivery header; webhook is not idempotent");
+    logger.warn(
+      { event, pipelineId },
+      "missing x-github-delivery header; webhook is not idempotent",
+    );
   }
 
   const run = await container.persistence.runRepository.create({
@@ -84,11 +87,19 @@ export async function processGithubWebhookEvent(input: {
     stages: [],
   });
 
-  logger.info({ runId: run.id, pipelineId, event, eventName: "webhook_received", deliveryId }, "queued run created from webhook");
+  logger.info(
+    { runId: run.id, pipelineId, event, eventName: "webhook_received", deliveryId },
+    "queued run created from webhook",
+  );
 }
 
 export const webhookService = {
-  enqueueGithubEvent(input: { event: GithubEventName; deliveryId: string | undefined; body: GithubWebhookBody; logger: Logger }): void {
+  enqueueGithubEvent(input: {
+    event: GithubEventName;
+    deliveryId: string | undefined;
+    body: GithubWebhookBody;
+    logger: Logger;
+  }): void {
     // Backwards-compatible wrapper (unused once webhook route enqueues BullMQ jobs).
     void processGithubWebhookEvent(input).catch(() => undefined);
   },

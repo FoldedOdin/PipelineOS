@@ -41,7 +41,6 @@ export interface CreateRunInput {
   stages?: StageDTO[];
 }
 
-
 export interface UpdateRunInput {
   status?: RunStatus;
   startedAt?: Date | null;

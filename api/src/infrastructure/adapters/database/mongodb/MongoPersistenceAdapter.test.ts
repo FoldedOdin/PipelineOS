@@ -16,6 +16,6 @@ describe.runIf(Boolean(uri))("MongoPersistenceAdapter Contract", () => {
       if (mongoose.connection.db) {
         await mongoose.connection.db.dropDatabase();
       }
-    }
+    },
   );
 });

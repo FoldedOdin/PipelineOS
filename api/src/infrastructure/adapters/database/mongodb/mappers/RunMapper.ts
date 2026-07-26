@@ -4,7 +4,8 @@ import { StageMapper } from "./StageMapper.js";
 
 export class RunMapper {
   static toDTO(doc: RunDocument): RunDTO {
-    const rawHistory = (doc as unknown as { remediationHistory?: RemediationAttemptDTO[] }).remediationHistory;
+    const rawHistory = (doc as unknown as { remediationHistory?: RemediationAttemptDTO[] })
+      .remediationHistory;
     return {
       id: doc._id.toString(),
       pipelineId: doc.pipelineId,
@@ -20,7 +21,9 @@ export class RunMapper {
       lastHeartbeatAt: doc.lastHeartbeatAt ? new Date(doc.lastHeartbeatAt) : null,
       claimedBy: doc.claimedBy ?? null,
       claimExpiresAt: doc.claimExpiresAt ? new Date(doc.claimExpiresAt) : null,
-      remediationHistory: rawHistory ? rawHistory.map((h) => ({ ...h, attemptedAt: new Date(h.attemptedAt) })) : undefined,
+      remediationHistory: rawHistory
+        ? rawHistory.map((h) => ({ ...h, attemptedAt: new Date(h.attemptedAt) }))
+        : undefined,
       createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
     };
   }

@@ -80,7 +80,7 @@ export default function RunnersList(): ReactElement {
             ) : (
               runners.map((r) => {
                 const heartbeat = new Date(r.lastHeartbeatAt);
-                
+
                 // If the server marked it as stale, treat it as offline in the UI regardless of DB status.
                 const displayStatus = r.isStale ? "offline" : r.status;
 
@@ -106,7 +106,9 @@ export default function RunnersList(): ReactElement {
                           <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-800">
                             <div
                               className="h-full bg-blue-500"
-                              style={{ width: `${String(Math.min(100, Math.max(0, ((r.activeRuns ?? 0) / r.maxConcurrentRuns) * 100)))}%` }}
+                              style={{
+                                width: `${String(Math.min(100, Math.max(0, ((r.activeRuns ?? 0) / r.maxConcurrentRuns) * 100)))}%`,
+                              }}
                             />
                           </div>
                           <span className="text-xs text-slate-400">

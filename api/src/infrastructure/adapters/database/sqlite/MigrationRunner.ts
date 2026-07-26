@@ -31,7 +31,11 @@ export class MigrationRunner {
 
   getAppliedMigrations(): AppliedMigration[] {
     this.ensureMigrationsTable();
-    const rows = this.db.prepare("SELECT version, applied_at as appliedAt FROM schema_migrations ORDER BY version ASC").all() as { version: string; appliedAt: string }[];
+    const rows = this.db
+      .prepare(
+        "SELECT version, applied_at as appliedAt FROM schema_migrations ORDER BY version ASC",
+      )
+      .all() as { version: string; appliedAt: string }[];
     return rows;
   }
 
@@ -43,7 +47,10 @@ export class MigrationRunner {
     }
 
     const appliedSet = new Set(this.getAppliedMigrations().map((m) => m.version));
-    const files = fs.readdirSync(this.migrationsDir).filter((f) => f.endsWith(".up.sql")).sort();
+    const files = fs
+      .readdirSync(this.migrationsDir)
+      .filter((f) => f.endsWith(".up.sql"))
+      .sort();
 
     for (const file of files) {
       const version = file.replace(/\.up\.sql$/, "");
@@ -56,15 +63,19 @@ export class MigrationRunner {
 
       const runMigrationTx = this.db.transaction(() => {
         this.db.exec(sql);
-        this.db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(
-          version,
-          new Date().toISOString()
-        );
+        this.db
+          .prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+          .run(version, new Date().toISOString());
       });
 
       runMigrationTx();
 
-      if (logger && typeof logger === "object" && "info" in logger && typeof (logger as { info: unknown }).info === "function") {
+      if (
+        logger &&
+        typeof logger === "object" &&
+        "info" in logger &&
+        typeof (logger as { info: unknown }).info === "function"
+      ) {
         (logger as { info: (msg: string) => void }).info(`applied migration: ${version}`);
       }
     }
@@ -95,8 +106,15 @@ export class MigrationRunner {
 
     rollbackTx();
 
-    if (logger && typeof logger === "object" && "info" in logger && typeof (logger as { info: unknown }).info === "function") {
-      (logger as { info: (msg: string) => void }).info(`rolled back migration: ${versionToRollback}`);
+    if (
+      logger &&
+      typeof logger === "object" &&
+      "info" in logger &&
+      typeof (logger as { info: unknown }).info === "function"
+    ) {
+      (logger as { info: (msg: string) => void }).info(
+        `rolled back migration: ${versionToRollback}`,
+      );
     }
   }
 }

@@ -19,7 +19,7 @@ const artifactSchema = new Schema(
     contentType: { type: String, required: true },
     storagePath: { type: String, required: true },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: false } }
+  { timestamps: { createdAt: "createdAt", updatedAt: false } },
 );
 
 artifactSchema.index({ runId: 1, name: 1 });

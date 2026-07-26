@@ -95,9 +95,10 @@ function dtoToView(dto: RemediationRuleDTO): RemediationRuleView {
 export const remediationService = {
   async listRules(pipelineId: string | null): Promise<RemediationRuleView[]> {
     const all = await container.persistence.remediationRuleRepository.findAll();
-    const filtered = pipelineId !== null
-      ? all.filter((r) => r.match.pipelineId === null || r.match.pipelineId === pipelineId)
-      : all;
+    const filtered =
+      pipelineId !== null
+        ? all.filter((r) => r.match.pipelineId === null || r.match.pipelineId === pipelineId)
+        : all;
     filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return filtered.map(dtoToView);
   },
@@ -110,14 +111,20 @@ export const remediationService = {
     if (name === null) return null;
 
     const enabled = obj.enabled === undefined ? true : Boolean(obj.enabled);
-    const matchRaw = typeof obj.match === "object" && obj.match !== null ? (obj.match as Record<string, unknown>) : {};
+    const matchRaw =
+      typeof obj.match === "object" && obj.match !== null
+        ? (obj.match as Record<string, unknown>)
+        : {};
 
     const pipelineId = asNonEmptyString(matchRaw.pipelineId) ?? null;
     const stageName = asNonEmptyString(matchRaw.stageName) ?? null;
     const anyPatterns = asStringArray(matchRaw.anyPatterns, 20);
     const anyHintSubstrings = asStringArray(matchRaw.anyHintSubstrings, 20);
 
-    const actionRaw = typeof obj.action === "object" && obj.action !== null ? (obj.action as Record<string, unknown>) : null;
+    const actionRaw =
+      typeof obj.action === "object" && obj.action !== null
+        ? (obj.action as Record<string, unknown>)
+        : null;
     if (actionRaw === null) return null;
     const type = actionRaw.type === "retry_stage" ? "retry_stage" : null;
     if (type === null) return null;
@@ -125,11 +132,15 @@ export const remediationService = {
     const maxAttempts = clampInt(actionRaw.maxAttempts, 2, 1, 5);
     const backoffSeconds = clampInt(actionRaw.backoffSeconds, 0, 0, 120);
 
-    const autoRaw = typeof obj.auto === "object" && obj.auto !== null ? (obj.auto as Record<string, unknown>) : {};
+    const autoRaw =
+      typeof obj.auto === "object" && obj.auto !== null
+        ? (obj.auto as Record<string, unknown>)
+        : {};
     const autoEnabled = autoRaw.enabled === true;
     const minAttempts = clampInt(autoRaw.minAttempts, 10, 1, 500);
     const disableBelowSuccessRateRaw =
-      typeof autoRaw.disableBelowSuccessRate === "number" && Number.isFinite(autoRaw.disableBelowSuccessRate)
+      typeof autoRaw.disableBelowSuccessRate === "number" &&
+      Number.isFinite(autoRaw.disableBelowSuccessRate)
         ? autoRaw.disableBelowSuccessRate
         : 0.2;
     const disableBelowSuccessRate = Math.max(0, Math.min(1, disableBelowSuccessRateRaw));
@@ -161,7 +172,12 @@ export const remediationService = {
 
     let enabled = rule.enabled;
     const successRate = attempts > 0 ? saves / attempts : 0;
-    if (rule.auto.enabled && enabled && attempts >= rule.auto.minAttempts && successRate < rule.auto.disableBelowSuccessRate) {
+    if (
+      rule.auto.enabled &&
+      enabled &&
+      attempts >= rule.auto.minAttempts &&
+      successRate < rule.auto.disableBelowSuccessRate
+    ) {
       enabled = false;
     }
 

@@ -19,7 +19,8 @@ analyticsRouter.get("/api/analytics/pipelines", async (_req, res, next) => {
 analyticsRouter.get("/api/analytics/flakiness", async (req, res, next) => {
   try {
     const pipelineIdRaw = req.query.pipelineId;
-    const pipelineId = typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
+    const pipelineId =
+      typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
     if (pipelineId === null) {
       res.status(400).json({ error: "pipelineId_required" });
       return;
@@ -34,7 +35,8 @@ analyticsRouter.get("/api/analytics/flakiness", async (req, res, next) => {
 analyticsRouter.get("/api/analytics/flakiness-heatmap", async (req, res, next) => {
   try {
     const pipelineIdRaw = req.query.pipelineId;
-    const pipelineId = typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
+    const pipelineId =
+      typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
     if (pipelineId === null) {
       res.status(400).json({ error: "pipelineId_required" });
       return;
@@ -62,7 +64,8 @@ analyticsRouter.get("/api/analytics/failure-trends", async (req, res, next) => {
 analyticsRouter.get("/api/analytics/stage-costs", async (req, res, next) => {
   try {
     const pipelineIdRaw = req.query.pipelineId;
-    const pipelineId = typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
+    const pipelineId =
+      typeof pipelineIdRaw === "string" && pipelineIdRaw !== "" ? pipelineIdRaw : null;
     if (pipelineId === null) {
       res.status(400).json({ error: "pipelineId_required" });
       return;

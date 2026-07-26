@@ -11,10 +11,10 @@ export class S3ArtifactStorageAdapter implements IArtifactStorageAdapter {
   constructor(
     region: string,
     bucket: string,
-    prefix: string = "pipelineos",
+    prefix = "pipelineos",
     endpoint?: string,
     credentials?: { accessKeyId: string; secretAccessKey: string },
-    forcePathStyle: boolean = false
+    forcePathStyle = false,
   ) {
     this.bucket = bucket;
     this.prefix = prefix;
@@ -35,7 +35,7 @@ export class S3ArtifactStorageAdapter implements IArtifactStorageAdapter {
     runId: string,
     stageName: string,
     fileName: string,
-    stream: Readable
+    stream: Readable,
   ): Promise<void> {
     const key = this.getKey(pipelineId, runId, stageName, fileName);
 
@@ -55,12 +55,14 @@ export class S3ArtifactStorageAdapter implements IArtifactStorageAdapter {
     pipelineId: string,
     runId: string,
     stageName: string,
-    fileName: string
+    fileName: string,
   ): Promise<Readable> {
     const key = this.getKey(pipelineId, runId, stageName, fileName);
 
     try {
-      const getResponse = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const getResponse = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
       if (!getResponse.Body) {
         throw new Error("No body in response");
       }

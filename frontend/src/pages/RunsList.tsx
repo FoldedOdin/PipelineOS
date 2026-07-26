@@ -22,7 +22,13 @@ function asString(value: unknown): string | null {
 }
 
 function asRunStatus(value: unknown): RunStatus | null {
-  return value === "queued" || value === "running" || value === "success" || value === "failed" || value === "cancelled" ? value : null;
+  return value === "queued" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "cancelled"
+    ? value
+    : null;
 }
 
 function formatDurationMs(startedAt: string | null, finishedAt: string | null): string {
@@ -106,8 +112,8 @@ export default function RunsList(): ReactElement {
           <p className="font-medium">Could not load runs</p>
           <p className="text-amber-200/80">{state.message}</p>
           <p className="mt-2 text-xs text-amber-200/60">
-            Ensure the API is running and <code className="rounded bg-black/30 px-1">GET /api/runs</code> is
-            implemented.
+            Ensure the API is running and{" "}
+            <code className="rounded bg-black/30 px-1">GET /api/runs</code> is implemented.
           </p>
         </div>
       ) : null}
@@ -151,8 +157,8 @@ export default function RunsList(): ReactElement {
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-lg font-medium text-slate-300">No runs yet</p>
                           <p className="max-w-md">
-                            Add a repository to PipelineOS by configuring a GitHub Webhook in your repository settings, 
-                            then push a commit to trigger your first run.
+                            Add a repository to PipelineOS by configuring a GitHub Webhook in your
+                            repository settings, then push a commit to trigger your first run.
                           </p>
                         </div>
                       </td>
@@ -171,10 +177,16 @@ export default function RunsList(): ReactElement {
                       </Link>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-200">{run.branch}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-200">{run.commitSha.slice(0, 7)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-200">
+                      {run.commitSha.slice(0, 7)}
+                    </td>
                     <td className="px-4 py-3 text-slate-300">{run.triggeredBy}</td>
-                    <td className="px-4 py-3 text-slate-400">{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</td>
-                    <td className="px-4 py-3 text-slate-400">{formatDurationMs(run.startedAt, run.finishedAt)}</td>
+                    <td className="px-4 py-3 text-slate-400">
+                      {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">
+                      {formatDurationMs(run.startedAt, run.finishedAt)}
+                    </td>
                   </tr>
                 ));
               })()}
@@ -205,7 +217,6 @@ export default function RunsList(): ReactElement {
           Next
         </button>
       </div>
-
     </div>
   );
 }

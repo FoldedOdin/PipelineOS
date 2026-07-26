@@ -37,16 +37,20 @@ export class MongoPipelineRepository implements IPipelineRepository {
     const doc = await Pipeline.findOneAndUpdate(
       { pipelineId },
       { $set: setFields },
-      { new: true }
+      { new: true },
     ).exec();
     return doc ? PipelineMapper.toDTO(doc as unknown as PipelineDocument) : null;
   }
 
-  async upsertSummaryStats(pipelineId: string, refSha: string, rawYaml: string): Promise<PipelineDTO> {
+  async upsertSummaryStats(
+    pipelineId: string,
+    refSha: string,
+    rawYaml: string,
+  ): Promise<PipelineDTO> {
     const doc = await Pipeline.findOneAndUpdate(
       { pipelineId },
       { $set: { pipelineId, refSha, rawYaml, updatedAt: new Date() } },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     ).exec();
     return PipelineMapper.toDTO(doc as unknown as PipelineDocument);
   }

@@ -2,22 +2,38 @@ import { createReadStream } from "node:fs";
 import type { Readable } from "node:stream";
 import fs from "node:fs/promises";
 import { BaseLocalFileSystemStorage } from "./BaseLocalFileSystemStorage.js";
-import type { ILogStorageAdapter, LogRangeQuery } from "../../../../domain/interfaces/storage/ILogStorageAdapter.js";
+import type {
+  ILogStorageAdapter,
+  LogRangeQuery,
+} from "../../../../domain/interfaces/storage/ILogStorageAdapter.js";
 
-export class LocalLogStorageAdapter extends BaseLocalFileSystemStorage implements ILogStorageAdapter {
+export class LocalLogStorageAdapter
+  extends BaseLocalFileSystemStorage
+  implements ILogStorageAdapter
+{
   constructor(basePath: string) {
     super(basePath);
   }
 
-  async appendLog(pipelineId: string, runId: string, stageName: string, chunk: string): Promise<void> {
+  async appendLog(
+    pipelineId: string,
+    runId: string,
+    stageName: string,
+    chunk: string,
+  ): Promise<void> {
     const filePath = this.getPath(pipelineId, runId, stageName, "stage.log");
     await this.ensureDirectoryForFile(filePath);
     await fs.appendFile(filePath, chunk, "utf-8");
   }
 
-  async getLogsStream(pipelineId: string, runId: string, stageName: string, range?: LogRangeQuery): Promise<Readable> {
+  async getLogsStream(
+    pipelineId: string,
+    runId: string,
+    stageName: string,
+    range?: LogRangeQuery,
+  ): Promise<Readable> {
     const filePath = this.getPath(pipelineId, runId, stageName, "stage.log");
-    
+
     try {
       await fs.access(filePath);
     } catch {

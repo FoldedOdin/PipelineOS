@@ -19,6 +19,7 @@ const webhookDeliverySchema = new Schema(
 // 7 days is generous and keeps storage stable.
 webhookDeliverySchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 
-export type WebhookDeliveryDocument = mongoose.HydratedDocument<mongoose.InferSchemaType<typeof webhookDeliverySchema>>;
+export type WebhookDeliveryDocument = mongoose.HydratedDocument<
+  mongoose.InferSchemaType<typeof webhookDeliverySchema>
+>;
 export const WebhookDelivery = mongoose.model("WebhookDelivery", webhookDeliverySchema);
-

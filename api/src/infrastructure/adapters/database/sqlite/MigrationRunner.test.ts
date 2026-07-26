@@ -21,15 +21,21 @@ describe("MigrationRunner and SeedRunner", () => {
   });
 
   it("applies up migrations in order and records versions", async () => {
-    fs.writeFileSync(path.join(tmpDir, "001_initial_schema.up.sql"), `
+    fs.writeFileSync(
+      path.join(tmpDir, "001_initial_schema.up.sql"),
+      `
       CREATE TABLE IF NOT EXISTS test_table (
         id TEXT PRIMARY KEY,
         name TEXT
       );
-    `);
-    fs.writeFileSync(path.join(tmpDir, "002_add_column.up.sql"), `
+    `,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "002_add_column.up.sql"),
+      `
       ALTER TABLE test_table ADD COLUMN status TEXT;
-    `);
+    `,
+    );
 
     const runner = new MigrationRunner(db, tmpDir);
     await runner.runMigrations();
@@ -48,9 +54,12 @@ describe("MigrationRunner and SeedRunner", () => {
   });
 
   it("skips already applied migrations", async () => {
-    fs.writeFileSync(path.join(tmpDir, "001_initial_schema.up.sql"), `
+    fs.writeFileSync(
+      path.join(tmpDir, "001_initial_schema.up.sql"),
+      `
       CREATE TABLE IF NOT EXISTS test_table (id TEXT PRIMARY KEY);
-    `);
+    `,
+    );
 
     const runner = new MigrationRunner(db, tmpDir);
     await runner.runMigrations();
@@ -62,12 +71,18 @@ describe("MigrationRunner and SeedRunner", () => {
   });
 
   it("rolls back the latest migration when requested", async () => {
-    fs.writeFileSync(path.join(tmpDir, "001_initial_schema.up.sql"), `
+    fs.writeFileSync(
+      path.join(tmpDir, "001_initial_schema.up.sql"),
+      `
       CREATE TABLE IF NOT EXISTS test_table (id TEXT PRIMARY KEY);
-    `);
-    fs.writeFileSync(path.join(tmpDir, "001_initial_schema.down.sql"), `
+    `,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "001_initial_schema.down.sql"),
+      `
       DROP TABLE IF EXISTS test_table;
-    `);
+    `,
+    );
 
     const runner = new MigrationRunner(db, tmpDir);
     await runner.runMigrations();
@@ -76,7 +91,9 @@ describe("MigrationRunner and SeedRunner", () => {
     await runner.rollbackMigration();
     expect(runner.getAppliedMigrations()).toHaveLength(0);
 
-    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'").get();
+    const tableCheck = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'")
+      .get();
     expect(tableCheck).toBeUndefined();
   });
 

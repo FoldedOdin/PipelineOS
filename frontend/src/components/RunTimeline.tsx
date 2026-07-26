@@ -17,7 +17,9 @@ const nodeStyles: Record<StageStatus, string> = {
   skipped: "border-amber-400 bg-amber-950 text-amber-100",
 };
 
-function mapStageStatus(status: StageStatus): "queued" | "running" | "success" | "failed" | "cancelled" {
+function mapStageStatus(
+  status: StageStatus,
+): "queued" | "running" | "success" | "failed" | "cancelled" {
   if (status === "pending") return "queued";
   if (status === "skipped") return "cancelled";
   return status;
@@ -43,7 +45,9 @@ export default function RunTimeline({ stages }: { stages: TimelineStage[] }): Re
                 </div>
                 <p className="font-mono text-xs opacity-80">{stage.durationLabel}</p>
               </div>
-              {index < stages.length - 1 ? <div className="h-px w-8 bg-slate-700" aria-hidden="true" /> : null}
+              {index < stages.length - 1 ? (
+                <div className="h-px w-8 bg-slate-700" aria-hidden="true" />
+              ) : null}
             </li>
           ))}
         </ol>

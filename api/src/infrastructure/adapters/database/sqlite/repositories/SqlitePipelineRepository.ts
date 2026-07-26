@@ -15,22 +15,28 @@ export class SqlitePipelineRepository implements IPipelineRepository {
   }
 
   async findById(pipelineId: string): Promise<PipelineDTO | null> {
-    const row = this.db.prepare("SELECT * FROM pipelines WHERE pipeline_id = ?").get(pipelineId) as SqlitePipelineRow | undefined;
+    const row = this.db.prepare("SELECT * FROM pipelines WHERE pipeline_id = ?").get(pipelineId) as
+      | SqlitePipelineRow
+      | undefined;
     return row ? SqlitePipelineMapper.toDTO(row) : null;
   }
 
   async findAll(): Promise<PipelineDTO[]> {
-    const rows = this.db.prepare("SELECT * FROM pipelines ORDER BY updated_at DESC").all() as SqlitePipelineRow[];
+    const rows = this.db
+      .prepare("SELECT * FROM pipelines ORDER BY updated_at DESC")
+      .all() as SqlitePipelineRow[];
     return rows.map((r) => SqlitePipelineMapper.toDTO(r));
   }
 
   async create(input: CreatePipelineInput): Promise<PipelineDTO> {
     const nowStr = new Date().toISOString();
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO pipelines (pipeline_id, ref_sha, raw_yaml, updated_at)
         VALUES (?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(input.pipelineId, input.refSha, input.rawYaml, nowStr);
 
     const created = await this.findById(input.pipelineId);
@@ -53,27 +59,35 @@ export class SqlitePipelineRepository implements IPipelineRepository {
 
     const row = SqlitePipelineMapper.toRow(updatedDTO);
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE pipelines
         SET ref_sha = ?, raw_yaml = ?, updated_at = ?
         WHERE pipeline_id = ?
-      `)
+      `,
+      )
       .run(row.ref_sha, row.raw_yaml, row.updated_at, pipelineId);
 
     return this.findById(pipelineId);
   }
 
-  async upsertSummaryStats(pipelineId: string, refSha: string, rawYaml: string): Promise<PipelineDTO> {
+  async upsertSummaryStats(
+    pipelineId: string,
+    refSha: string,
+    rawYaml: string,
+  ): Promise<PipelineDTO> {
     const nowStr = new Date().toISOString();
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO pipelines (pipeline_id, ref_sha, raw_yaml, updated_at)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(pipeline_id) DO UPDATE SET
           ref_sha = excluded.ref_sha,
           raw_yaml = excluded.raw_yaml,
           updated_at = excluded.updated_at
-      `)
+      `,
+      )
       .run(pipelineId, refSha, rawYaml, nowStr);
 
     const upserted = await this.findById(pipelineId);

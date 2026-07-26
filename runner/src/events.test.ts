@@ -24,7 +24,7 @@ describe("InProcessEventBus", () => {
         runId: "run-1",
         runnerId: "runner-a",
         pipelineId: "pipe-1",
-      }
+      },
     });
 
     expect(received).toHaveLength(1);
@@ -46,7 +46,7 @@ describe("InProcessEventBus", () => {
         runId: "run-2",
         runnerId: "runner-b",
         pipelineId: null,
-      }
+      },
     });
 
     expect(received).toHaveLength(0);
@@ -69,7 +69,7 @@ describe("InProcessEventBus", () => {
         stageName: "build",
         image: "node:20",
         attempt: 1,
-      }
+      },
     });
 
     expect(calls).toEqual(["a", "b"]);
@@ -90,7 +90,7 @@ describe("InProcessEventBus", () => {
         runId: "run-4",
         status: "success",
         durationMs: 100,
-      }
+      },
     });
 
     unsub();
@@ -106,7 +106,7 @@ describe("InProcessEventBus", () => {
         runId: "run-5",
         status: "failed",
         durationMs: 200,
-      }
+      },
     });
 
     expect(received).toHaveLength(1);
@@ -130,7 +130,7 @@ describe("InProcessEventBus", () => {
         runnerId: "runner-x",
         activeRuns: 0,
         maxConcurrentRuns: 1,
-      }
+      },
     });
 
     // Give the microtask queue a chance to process the async rejection.
@@ -156,9 +156,9 @@ describe("InProcessEventBus", () => {
         stageName: "test",
         chunk: "hello stdout",
         source: "stdout",
-      }
+      },
     });
-    
+
     bus.publish({
       id: "evt-8",
       version: 1,
@@ -171,7 +171,7 @@ describe("InProcessEventBus", () => {
         stageName: "test",
         chunk: "hello stderr",
         source: "stderr",
-      }
+      },
     });
 
     expect(chunks).toEqual(["stdout:hello stdout", "stderr:hello stderr"]);

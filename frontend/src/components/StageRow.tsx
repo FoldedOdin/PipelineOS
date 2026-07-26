@@ -42,7 +42,9 @@ export default function StageRow({
           <StatusBadge status={mapped} />
         </div>
       </div>
-      {children !== undefined ? <div className="mt-3 border-t border-slate-800 pt-3">{children}</div> : null}
+      {children !== undefined ? (
+        <div className="mt-3 border-t border-slate-800 pt-3">{children}</div>
+      ) : null}
     </div>
   );
 }

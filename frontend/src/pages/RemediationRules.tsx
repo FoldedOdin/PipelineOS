@@ -7,7 +7,12 @@ interface Rule {
   id: string;
   enabled: boolean;
   name: string;
-  match: { pipelineId: string | null; stageName: string | null; anyPatterns: string[]; anyHintSubstrings: string[] };
+  match: {
+    pipelineId: string | null;
+    stageName: string | null;
+    anyPatterns: string[];
+    anyHintSubstrings: string[];
+  };
   action: { type: "retry_stage"; maxAttempts: number; backoffSeconds: number };
   auto: { enabled: boolean; minAttempts: number; disableBelowSuccessRate: number };
   stats: { attempts: number; saves: number; failures: number; successRate: number };
@@ -42,10 +47,16 @@ function parseRules(payload: unknown): Rule[] {
     const name = asString(o.name);
     if (!id || !name) continue;
     const enabled = o.enabled !== false;
-    const matchRaw = typeof o.match === "object" && o.match !== null ? (o.match as Record<string, unknown>) : {};
-    const actionRaw = typeof o.action === "object" && o.action !== null ? (o.action as Record<string, unknown>) : null;
-    const autoRaw = typeof o.auto === "object" && o.auto !== null ? (o.auto as Record<string, unknown>) : {};
-    const statsRaw = typeof o.stats === "object" && o.stats !== null ? (o.stats as Record<string, unknown>) : {};
+    const matchRaw =
+      typeof o.match === "object" && o.match !== null ? (o.match as Record<string, unknown>) : {};
+    const actionRaw =
+      typeof o.action === "object" && o.action !== null
+        ? (o.action as Record<string, unknown>)
+        : null;
+    const autoRaw =
+      typeof o.auto === "object" && o.auto !== null ? (o.auto as Record<string, unknown>) : {};
+    const statsRaw =
+      typeof o.stats === "object" && o.stats !== null ? (o.stats as Record<string, unknown>) : {};
     if (actionRaw?.type !== "retry_stage") continue;
     const maxAttempts = asNumber(actionRaw.maxAttempts) ?? 1;
     const backoffSeconds = asNumber(actionRaw.backoffSeconds) ?? 0;
@@ -116,7 +127,9 @@ export default function RemediationRules(): ReactElement {
 
   const sorted = useMemo(() => {
     if (!rules) return [];
-    return [...rules].sort((a, b) => (b.stats.successRate - a.stats.successRate) || (b.stats.attempts - a.stats.attempts));
+    return [...rules].sort(
+      (a, b) => b.stats.successRate - a.stats.successRate || b.stats.attempts - a.stats.attempts,
+    );
   }, [rules]);
 
   return (
@@ -126,7 +139,10 @@ export default function RemediationRules(): ReactElement {
           <h2 className="text-xl font-semibold text-white">Remediation rules</h2>
           <p className="text-sm text-slate-400">Manage automated retries and resolutions.</p>
         </div>
-        <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/dashboard">
+        <Link
+          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800"
+          to="/dashboard"
+        >
           Dashboard
         </Link>
       </div>
@@ -176,7 +192,9 @@ export default function RemediationRules(): ReactElement {
       </div>
 
       {error !== undefined ? (
-        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-100">{error}</div>
+        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-100">
+          {error}
+        </div>
       ) : null}
 
       <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
@@ -193,7 +211,12 @@ export default function RemediationRules(): ReactElement {
                   await apiPostJson("/api/remediation/rules", {
                     name: `Retry network timeouts${pipelineId ? ` (${pipelineId})` : ""}`,
                     enabled: true,
-                    match: { pipelineId: pipelineId || null, stageName: null, anyPatterns: ["network_or_timeout"], anyHintSubstrings: [] },
+                    match: {
+                      pipelineId: pipelineId || null,
+                      stageName: null,
+                      anyPatterns: ["network_or_timeout"],
+                      anyHintSubstrings: [],
+                    },
                     action: { type: "retry_stage", maxAttempts: 2, backoffSeconds: 5 },
                     auto: { enabled: true, minAttempts: 10, disableBelowSuccessRate: 0.2 },
                   });
@@ -209,7 +232,7 @@ export default function RemediationRules(): ReactElement {
             Add example rule
           </button>
         </div>
-          These rules automatically evaluate flaking tests and apply matching actions.
+        These rules automatically evaluate flaking tests and apply matching actions.
       </div>
 
       {rules === undefined ? (
@@ -233,18 +256,24 @@ export default function RemediationRules(): ReactElement {
               {sorted.map((r) => (
                 <tr key={r.id} className="border-t border-slate-800">
                   <td className="px-3 py-2 font-medium text-white">{r.name}</td>
-                  <td className="px-3 py-2 font-mono text-slate-300">{r.enabled ? "true" : "false"}</td>
+                  <td className="px-3 py-2 font-mono text-slate-300">
+                    {r.enabled ? "true" : "false"}
+                  </td>
                   <td className="px-3 py-2 text-xs text-slate-400">
                     <div>pipeline: {r.match.pipelineId ?? "any"}</div>
                     <div>stage: {r.match.stageName ?? "any"}</div>
                     <div>patterns: {r.match.anyPatterns.join(", ") || "—"}</div>
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-400">
-                    retry x{String(r.action.maxAttempts)} (backoff {String(r.action.backoffSeconds)}s)
+                    retry x{String(r.action.maxAttempts)} (backoff {String(r.action.backoffSeconds)}
+                    s)
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-400">
-                    attempts {String(r.stats.attempts)} · saves {String(r.stats.saves)} · failures {String(r.stats.failures)} ·{" "}
-                    <span className="text-amber-200">{(r.stats.successRate * 100).toFixed(1)}%</span>
+                    attempts {String(r.stats.attempts)} · saves {String(r.stats.saves)} · failures{" "}
+                    {String(r.stats.failures)} ·{" "}
+                    <span className="text-amber-200">
+                      {(r.stats.successRate * 100).toFixed(1)}%
+                    </span>
                     {r.auto.enabled ? <span className="ml-2 text-emerald-400">auto</span> : null}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -274,4 +303,3 @@ export default function RemediationRules(): ReactElement {
     </div>
   );
 }
-

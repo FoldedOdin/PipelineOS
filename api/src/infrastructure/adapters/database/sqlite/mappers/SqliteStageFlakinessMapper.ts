@@ -19,7 +19,12 @@ export class SqliteStageFlakinessMapper {
           outcomes = parsed.map((o: unknown) => {
             const item = o as Record<string, unknown>;
             return {
-              runId: typeof item.runId === "string" ? item.runId : String(item.runId || ""),
+              runId:
+                typeof item.runId === "string"
+                  ? item.runId
+                  : typeof item.runId === "number" || typeof item.runId === "boolean"
+                    ? String(item.runId)
+                    : "",
               success: Boolean(item.success),
               at: typeof item.at === "string" ? new Date(item.at) : new Date(),
             };
@@ -50,7 +55,7 @@ export class SqliteStageFlakinessMapper {
           runId: o.runId,
           success: o.success,
           at: o.at instanceof Date ? o.at.toISOString() : String(o.at),
-        }))
+        })),
       ),
       created_at: dto.createdAt ? dto.createdAt.toISOString() : new Date().toISOString(),
       updated_at: dto.updatedAt ? dto.updatedAt.toISOString() : new Date().toISOString(),

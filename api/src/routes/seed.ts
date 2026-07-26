@@ -7,9 +7,16 @@ export const seedRouter = Router();
 seedRouter.post("/internal/seed/pipelines", requireInternalApiKey, async (req, res, next) => {
   try {
     const { pipelineId, rawYaml } =
-      typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>) : {};
+      typeof req.body === "object" && req.body !== null
+        ? (req.body as Record<string, unknown>)
+        : {};
 
-    if (typeof pipelineId !== "string" || pipelineId === "" || typeof rawYaml !== "string" || rawYaml === "") {
+    if (
+      typeof pipelineId !== "string" ||
+      pipelineId === "" ||
+      typeof rawYaml !== "string" ||
+      rawYaml === ""
+    ) {
       res.status(400).json({ error: "invalid_input" });
       return;
     }

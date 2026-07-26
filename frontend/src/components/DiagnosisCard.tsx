@@ -17,8 +17,12 @@ function parseDiagnosis(payload: unknown): DiagnosisPayload | null {
   const summary = typeof o.summary === "string" ? o.summary : null;
   const llmUsed = o.llmUsed === true;
   if (summary === null) return null;
-  const hints = Array.isArray(o.hints) ? o.hints.filter((h): h is string => typeof h === "string") : [];
-  const patterns = Array.isArray(o.patterns) ? o.patterns.filter((p): p is string => typeof p === "string") : [];
+  const hints = Array.isArray(o.hints)
+    ? o.hints.filter((h): h is string => typeof h === "string")
+    : [];
+  const patterns = Array.isArray(o.patterns)
+    ? o.patterns.filter((p): p is string => typeof p === "string")
+    : [];
   return { summary, hints, llmUsed, patterns };
 }
 
@@ -83,18 +87,23 @@ export default function DiagnosisCard(props: DiagnosisCardProps): ReactElement {
           {data !== undefined && !loading ? (
             <div className="space-y-2">
               <p className="text-slate-100">{data.summary}</p>
-              {data.llmUsed ? <p className="text-xs text-emerald-400">LLM summary enabled</p> : null}
+              {data.llmUsed ? (
+                <p className="text-xs text-emerald-400">LLM summary enabled</p>
+              ) : null}
               {data.patterns.length > 0 ? (
-                <p className="text-xs text-slate-500">
-                  Patterns: {data.patterns.join(", ")}
-                </p>
+                <p className="text-xs text-slate-500">Patterns: {data.patterns.join(", ")}</p>
               ) : null}
               {data.hints.length > 0 ? (
                 <div>
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Likely error lines</p>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Likely error lines
+                  </p>
                   <ul className="max-h-64 overflow-auto rounded border border-slate-800 bg-black/40 font-mono text-xs text-slate-300">
                     {data.hints.map((h, idx) => (
-                      <li key={`${String(idx)}-${h.slice(0, 40)}`} className="border-b border-slate-900/80 px-2 py-1 last:border-b-0">
+                      <li
+                        key={`${String(idx)}-${h.slice(0, 40)}`}
+                        className="border-b border-slate-900/80 px-2 py-1 last:border-b-0"
+                      >
                         {h}
                       </li>
                     ))}

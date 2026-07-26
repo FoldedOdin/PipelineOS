@@ -19,21 +19,25 @@ export class MongoStageRepository implements IStageRepository {
     if (!isValidObjectId(runId)) return null;
     const run = await Run.findById(runId).exec();
     if (!run) return null;
-    const stage = (run.stages ?? []).find((s: unknown) => (s as MongoStageResult).name === stageName);
+    const stage = (run.stages ?? []).find(
+      (s: unknown) => (s as MongoStageResult).name === stageName,
+    );
     return stage ? StageMapper.toDTO(stage as unknown as MongoStageResult) : null;
   }
 
   async updateStatus(
     runId: string,
     stageName: string,
-    input: UpdateStageStatusInput
+    input: UpdateStageStatusInput,
   ): Promise<StageDTO | null> {
     if (!isValidObjectId(runId)) return null;
     const run = await Run.findById(runId).exec();
     if (!run) return null;
 
     const stages = run.stages ?? [];
-    const stage = stages.find((s: unknown) => (s as MongoStageResult).name === stageName) as unknown as (MongoStageResult & { status: string });
+    const stage = stages.find(
+      (s: unknown) => (s as MongoStageResult).name === stageName,
+    ) as unknown as MongoStageResult & { status: string };
     if (!stage) return null;
 
     stage.status = input.status;
@@ -49,11 +53,16 @@ export class MongoStageRepository implements IStageRepository {
         memBytesMax: null,
         costUsdEstimated: null,
       };
-      if (input.metrics.cpuSeconds !== undefined) stage.metrics.cpuSeconds = input.metrics.cpuSeconds ?? null;
-      if (input.metrics.cpuPercentAvg !== undefined) stage.metrics.cpuPercentAvg = input.metrics.cpuPercentAvg ?? null;
-      if (input.metrics.cpuPercentMax !== undefined) stage.metrics.cpuPercentMax = input.metrics.cpuPercentMax ?? null;
-      if (input.metrics.memBytesMax !== undefined) stage.metrics.memBytesMax = input.metrics.memBytesMax ?? null;
-      if (input.metrics.costUsdEstimated !== undefined) stage.metrics.costUsdEstimated = input.metrics.costUsdEstimated ?? null;
+      if (input.metrics.cpuSeconds !== undefined)
+        stage.metrics.cpuSeconds = input.metrics.cpuSeconds ?? null;
+      if (input.metrics.cpuPercentAvg !== undefined)
+        stage.metrics.cpuPercentAvg = input.metrics.cpuPercentAvg ?? null;
+      if (input.metrics.cpuPercentMax !== undefined)
+        stage.metrics.cpuPercentMax = input.metrics.cpuPercentMax ?? null;
+      if (input.metrics.memBytesMax !== undefined)
+        stage.metrics.memBytesMax = input.metrics.memBytesMax ?? null;
+      if (input.metrics.costUsdEstimated !== undefined)
+        stage.metrics.costUsdEstimated = input.metrics.costUsdEstimated ?? null;
     }
 
     await run.save();

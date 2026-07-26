@@ -10,9 +10,7 @@ function requiredEnv(name: string): string {
 
 function looksLikePlaceholder(value: string): boolean {
   return (
-    value.startsWith("CHANGE_ME") ||
-    value === "same_as_above" ||
-    value === "random_string_here"
+    value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here"
   );
 }
 

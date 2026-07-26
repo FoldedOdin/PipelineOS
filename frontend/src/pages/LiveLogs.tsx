@@ -69,7 +69,10 @@ export default function LiveLogs(): ReactElement {
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-        <label className="block text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="logSearch">
+        <label
+          className="block text-xs font-medium uppercase tracking-wide text-slate-500"
+          htmlFor="logSearch"
+        >
           Search logs
         </label>
         <input

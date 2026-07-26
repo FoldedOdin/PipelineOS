@@ -4,7 +4,7 @@ import type { IPersistenceAdapter } from "../../../domain/index.js";
 export function describeRepositoryContract(
   name: string,
   createAdapter: () => Promise<IPersistenceAdapter>,
-  cleanup: () => Promise<void>
+  cleanup: () => Promise<void>,
 ): void {
   describe(`Repository Contract: ${name}`, () => {
     let adapter: IPersistenceAdapter;
@@ -98,7 +98,6 @@ export function describeRepositoryContract(
             },
           },
         ],
-
       });
 
       const updated = await stageRepo.updateStatus(run.id, "build", {

@@ -7,7 +7,8 @@ export interface DiagnosisResult {
   patterns: string[];
 }
 
-const ERROR_LINE = /^(?:Error|ERROR|FAIL|Failed|failed|\[31m|npm ERR!|AssertionError|Unhandled|panic:|fatal:)/i;
+const ERROR_LINE =
+  /^(?:Error|ERROR|FAIL|Failed|failed|\[31m|npm ERR!|AssertionError|Unhandled|panic:|fatal:)/i;
 
 function extractHints(logs: string, maxLines: number): string[] {
   const lines = logs.split(/\r?\n/);
@@ -28,7 +29,8 @@ function detectPatterns(logs: string): string[] {
   if (/jest|vitest|mocha|pytest|go test/i.test(logs)) patterns.push("test_runner_output");
   if (/eslint|prettier|tsc|TypeScript|TS\d{4}/i.test(logs)) patterns.push("lint_or_typecheck");
   if (/docker|image pull|manifest unknown/i.test(logs)) patterns.push("container_or_image");
-  if (/connection refused|ECONNREFUSED|timeout|ETIMEDOUT/i.test(logs)) patterns.push("network_or_timeout");
+  if (/connection refused|ECONNREFUSED|timeout|ETIMEDOUT/i.test(logs))
+    patterns.push("network_or_timeout");
   if (/permission denied|EACCES|EPERM/i.test(logs)) patterns.push("permission");
   return patterns;
 }
@@ -109,7 +111,10 @@ export const diagnosisService = {
     let llmUsed = false;
     if (status === "failed" && logs.trim().length > 0 && process.env.OPENAI_API_KEY) {
       const tail = logs.length > 12_000 ? logs.slice(-12_000) : logs;
-      const llm = await maybeLlmSummarize(tail, hints.length > 0 ? hints : [tail.split(/\r?\n/).slice(-5).join("\n")]);
+      const llm = await maybeLlmSummarize(
+        tail,
+        hints.length > 0 ? hints : [tail.split(/\r?\n/).slice(-5).join("\n")],
+      );
       if (llm !== null) {
         summary = llm;
         llmUsed = true;

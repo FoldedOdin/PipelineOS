@@ -16,10 +16,12 @@ export class SqliteWebhookDeliveryRepository implements IWebhookDeliveryReposito
     const nowStr = new Date().toISOString();
 
     const res = this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT OR IGNORE INTO webhook_deliveries (id, delivery_id, event, pipeline_id, created_at)
         VALUES (?, ?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(id, input.deliveryId, input.event, input.pipelineId, nowStr);
 
     return res.changes > 0;

@@ -77,5 +77,7 @@ remediationRuleSchema.index({ "match.pipelineId": 1, enabled: 1 });
 
 export type RemediationRuleDocument = mongoose.HydratedDocument<RemediationRuleSchemaType>;
 
-export const RemediationRule = mongoose.model<RemediationRuleSchemaType>("RemediationRule", remediationRuleSchema);
-
+export const RemediationRule = mongoose.model<RemediationRuleSchemaType>(
+  "RemediationRule",
+  remediationRuleSchema,
+);

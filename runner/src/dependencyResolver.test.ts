@@ -15,15 +15,19 @@ function stage(name: string, depends_on: string[] = []): PipelineStage {
 
 describe("resolveStageOrder", () => {
   it("orders stages so dependencies run first", () => {
-    const order = resolveStageOrder([stage("build", ["install"]), stage("install"), stage("test", ["install"])]);
+    const order = resolveStageOrder([
+      stage("build", ["install"]),
+      stage("install"),
+      stage("test", ["install"]),
+    ]);
 
     expect(order.indexOf("install")).toBeLessThan(order.indexOf("build"));
     expect(order.indexOf("install")).toBeLessThan(order.indexOf("test"));
   });
 
   it("reports a readable cycle path", () => {
-    expect(() => resolveStageOrder([stage("a", ["b"]), stage("b", ["c"]), stage("c", ["a"])])).toThrow(
-      "cycle detected in depends_on: a -> b -> c -> a",
-    );
+    expect(() =>
+      resolveStageOrder([stage("a", ["b"]), stage("b", ["c"]), stage("c", ["a"])]),
+    ).toThrow("cycle detected in depends_on: a -> b -> c -> a");
   });
 });

@@ -9,7 +9,12 @@ function requiredEnv(name: string): string {
 }
 
 function looksLikePlaceholder(value: string): boolean {
-  return value.startsWith("CHANGE_ME") || value === "same_as_above" || value === "random_string_here" || value === "your_webhook_secret_here";
+  return (
+    value.startsWith("CHANGE_ME") ||
+    value === "same_as_above" ||
+    value === "random_string_here" ||
+    value === "your_webhook_secret_here"
+  );
 }
 
 function optionalEnv(name: string): string | null {
@@ -26,7 +31,10 @@ export function validateApiConfig(logger: Logger): void {
     throw new Error("PORT must be a valid TCP port number");
   }
 
-  requiredEnv("MONGODB_URI");
+  const provider = optionalEnv("PERSISTENCE_TYPE") ?? "sqlite";
+  if (provider === "mongodb") {
+    requiredEnv("MONGODB_URI");
+  }
   requiredEnv("REDIS_URL");
 
   const internalKey = requiredEnv("INTERNAL_API_KEY");
@@ -45,9 +53,10 @@ export function validateApiConfig(logger: Logger): void {
   const installationId = optionalEnv("GITHUB_APP_INSTALLATION_ID");
   const anyGithubApp = appId !== null || privateKey !== null || installationId !== null;
   if (anyGithubApp && (!appId || !privateKey || !installationId)) {
-    throw new Error("GitHub App config incomplete: set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID");
+    throw new Error(
+      "GitHub App config incomplete: set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID",
+    );
   }
 
   logger.info({ githubAppConfigured: anyGithubApp }, "api config validated");
 }
-

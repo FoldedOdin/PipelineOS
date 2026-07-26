@@ -15,5 +15,10 @@ export interface ILogStorageAdapter {
    * Retrieves logs as a readable stream.
    * Can optionally limit to a byte range (e.g. for streaming to UI).
    */
-  getLogsStream(pipelineId: string, runId: string, stageName: string, range?: LogRangeQuery): Promise<Readable>;
+  getLogsStream(
+    pipelineId: string,
+    runId: string,
+    stageName: string,
+    range?: LogRangeQuery,
+  ): Promise<Readable>;
 }

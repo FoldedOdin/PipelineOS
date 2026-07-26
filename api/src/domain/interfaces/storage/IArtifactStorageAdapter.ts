@@ -9,7 +9,7 @@ export interface IArtifactStorageAdapter {
     runId: string,
     stageName: string,
     fileName: string,
-    stream: Readable
+    stream: Readable,
   ): Promise<void>;
 
   /**
@@ -19,6 +19,6 @@ export interface IArtifactStorageAdapter {
     pipelineId: string,
     runId: string,
     stageName: string,
-    fileName: string
+    fileName: string,
   ): Promise<Readable>;
 }

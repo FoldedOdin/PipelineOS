@@ -8,7 +8,12 @@ import type {
   StageCostAggregateDTO,
 } from "../../../../../domain/index.js";
 
-import { SqliteRunMapper, type SqliteRunRow, SqliteStageMapper, type SqliteStageRow } from "../mappers/index.js";
+import {
+  SqliteRunMapper,
+  type SqliteRunRow,
+  SqliteStageMapper,
+  type SqliteStageRow,
+} from "../mappers/index.js";
 
 export class SqliteRunRepository implements IRunRepository {
   private readonly db: Database;
@@ -26,11 +31,13 @@ export class SqliteRunRepository implements IRunRepository {
   }
 
   async findById(runId: string): Promise<RunDTO | null> {
-    const row = this.db.prepare("SELECT * FROM runs WHERE id = ?").get(runId) as SqliteRunRow | undefined;
+    const row = this.db.prepare("SELECT * FROM runs WHERE id = ?").get(runId) as
+      | SqliteRunRow
+      | undefined;
     return row ? this.rowToDTO(row) : null;
   }
 
-  async findByPipeline(pipelineId: string, limit: number = 20): Promise<RunDTO[]> {
+  async findByPipeline(pipelineId: string, limit = 20): Promise<RunDTO[]> {
     const rows = this.db
       .prepare("SELECT * FROM runs WHERE pipeline_id = ? ORDER BY created_at DESC LIMIT ?")
       .all(pipelineId, limit) as SqliteRunRow[];
@@ -66,14 +73,17 @@ export class SqliteRunRepository implements IRunRepository {
   }
 
   async findDistinctPipelines(): Promise<string[]> {
-    const rows = this.db.prepare("SELECT DISTINCT pipeline_id FROM runs ORDER BY pipeline_id ASC").all() as { pipeline_id: string }[];
+    const rows = this.db
+      .prepare("SELECT DISTINCT pipeline_id FROM runs ORDER BY pipeline_id ASC")
+      .all() as { pipeline_id: string }[];
     return rows.map((r) => r.pipeline_id);
   }
 
-  async findStaleRuns(staleBefore: Date, limit: number = 50): Promise<RunDTO[]> {
+  async findStaleRuns(staleBefore: Date, limit = 50): Promise<RunDTO[]> {
     const staleStr = staleBefore.toISOString();
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT * FROM runs
         WHERE status = 'running'
           AND (
@@ -83,15 +93,21 @@ export class SqliteRunRepository implements IRunRepository {
           )
         ORDER BY created_at ASC
         LIMIT ?
-      `)
+      `,
+      )
       .all(staleStr, staleStr, staleStr, limit) as SqliteRunRow[];
     return rows.map((r) => this.rowToDTO(r));
   }
 
-  async topStageCosts(pipelineId: string, limit: number, since: Date): Promise<StageCostAggregateDTO[]> {
+  async topStageCosts(
+    pipelineId: string,
+    limit: number,
+    since: Date,
+  ): Promise<StageCostAggregateDTO[]> {
     const sinceStr = since.toISOString();
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT 
           s.name AS stageName,
           COUNT(*) AS runs,
@@ -104,7 +120,8 @@ export class SqliteRunRepository implements IRunRepository {
         GROUP BY s.name
         ORDER BY totalCostUsd DESC
         LIMIT ?
-      `)
+      `,
+      )
       .all(pipelineId, sinceStr, limit) as {
       stageName: string;
       runs: number;
@@ -138,13 +155,15 @@ export class SqliteRunRepository implements IRunRepository {
 
     const tx = this.db.transaction(() => {
       this.db
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO runs (
             id, pipeline_id, commit_sha, branch, triggered_by, event, status,
             started_at, finished_at, duration_ms, last_heartbeat_at,
             claimed_by, claim_expires_at, remediation_history_json, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, null, null, null, null, null, null, '[]', ?)
-        `)
+        `,
+        )
         .run(
           runId,
           input.pipelineId,
@@ -153,7 +172,7 @@ export class SqliteRunRepository implements IRunRepository {
           input.triggeredBy,
           input.event,
           status,
-          nowStr
+          nowStr,
         );
 
       const stageInsert = this.db.prepare(`
@@ -177,7 +196,7 @@ export class SqliteRunRepository implements IRunRepository {
           row.finished_at,
           row.duration_ms,
           row.logs,
-          row.metrics_json
+          row.metrics_json,
         );
       }
     });
@@ -199,25 +218,38 @@ export class SqliteRunRepository implements IRunRepository {
       ...existing,
       status: updates.status !== undefined ? updates.status : existing.status,
       startedAt: updates.startedAt !== undefined ? (updates.startedAt ?? null) : existing.startedAt,
-      finishedAt: updates.finishedAt !== undefined ? (updates.finishedAt ?? null) : existing.finishedAt,
-      durationMs: updates.durationMs !== undefined ? (updates.durationMs ?? null) : existing.durationMs,
-      lastHeartbeatAt: updates.lastHeartbeatAt !== undefined ? (updates.lastHeartbeatAt ?? null) : existing.lastHeartbeatAt,
+      finishedAt:
+        updates.finishedAt !== undefined ? (updates.finishedAt ?? null) : existing.finishedAt,
+      durationMs:
+        updates.durationMs !== undefined ? (updates.durationMs ?? null) : existing.durationMs,
+      lastHeartbeatAt:
+        updates.lastHeartbeatAt !== undefined
+          ? (updates.lastHeartbeatAt ?? null)
+          : existing.lastHeartbeatAt,
       claimedBy: updates.claimedBy !== undefined ? (updates.claimedBy ?? null) : existing.claimedBy,
-      claimExpiresAt: updates.claimExpiresAt !== undefined ? (updates.claimExpiresAt ?? null) : existing.claimExpiresAt,
-      remediationHistory: updates.remediationHistory !== undefined ? updates.remediationHistory : existing.remediationHistory,
+      claimExpiresAt:
+        updates.claimExpiresAt !== undefined
+          ? (updates.claimExpiresAt ?? null)
+          : existing.claimExpiresAt,
+      remediationHistory:
+        updates.remediationHistory !== undefined
+          ? updates.remediationHistory
+          : existing.remediationHistory,
     };
 
     const row = SqliteRunMapper.toRow(updatedDTO);
 
     const tx = this.db.transaction(() => {
       this.db
-        .prepare(`
+        .prepare(
+          `
           UPDATE runs
           SET status = ?, started_at = ?, finished_at = ?, duration_ms = ?,
               last_heartbeat_at = ?, claimed_by = ?, claim_expires_at = ?,
               remediation_history_json = ?
           WHERE id = ?
-        `)
+        `,
+        )
         .run(
           row.status,
           row.started_at,
@@ -227,7 +259,7 @@ export class SqliteRunRepository implements IRunRepository {
           row.claimed_by,
           row.claim_expires_at,
           row.remediation_history_json,
-          runId
+          runId,
         );
 
       if (updates.stages !== undefined) {
@@ -252,7 +284,7 @@ export class SqliteRunRepository implements IRunRepository {
             sRow.finished_at,
             sRow.duration_ms,
             sRow.logs,
-            sRow.metrics_json
+            sRow.metrics_json,
           );
         }
       }
@@ -270,13 +302,15 @@ export class SqliteRunRepository implements IRunRepository {
 
     const tx = this.db.transaction(() => {
       const candidate = this.db
-        .prepare(`
+        .prepare(
+          `
           SELECT * FROM runs
           WHERE status = 'queued'
              OR (claim_expires_at IS NOT NULL AND claim_expires_at <= ?)
           ORDER BY created_at ASC
           LIMIT 1
-        `)
+        `,
+        )
         .get(nowStr) as SqliteRunRow | undefined;
 
       if (!candidate) {
@@ -284,7 +318,8 @@ export class SqliteRunRepository implements IRunRepository {
       }
 
       this.db
-        .prepare(`
+        .prepare(
+          `
           UPDATE runs
           SET status = 'running',
               started_at = COALESCE(started_at, ?),
@@ -292,17 +327,23 @@ export class SqliteRunRepository implements IRunRepository {
               claimed_by = ?,
               claim_expires_at = ?
           WHERE id = ?
-        `)
+        `,
+        )
         .run(nowStr, nowStr, runnerId, leaseUntil, candidate.id);
 
-      const updatedRow = this.db.prepare("SELECT * FROM runs WHERE id = ?").get(candidate.id) as SqliteRunRow;
+      const updatedRow = this.db
+        .prepare("SELECT * FROM runs WHERE id = ?")
+        .get(candidate.id) as SqliteRunRow;
       return this.rowToDTO(updatedRow);
     });
 
     return tx();
   }
 
-  async addRemediationHistory(runId: string, attempt: RemediationAttemptDTO): Promise<RunDTO | null> {
+  async addRemediationHistory(
+    runId: string,
+    attempt: RemediationAttemptDTO,
+  ): Promise<RunDTO | null> {
     const existing = await this.findById(runId);
     if (!existing) return null;
 

@@ -100,7 +100,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
     type: "RunClaimed",
     occurredAt: new Date().toISOString(),
     source: `runner:${runnerId}`,
-    payload: { type: "RunClaimed", runId, runnerId, pipelineId }
+    payload: { type: "RunClaimed", runId, runnerId, pipelineId },
   });
 
   try {
@@ -130,7 +130,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
       type: "RunFinished",
       occurredAt: new Date().toISOString(),
       source: `runner:${runnerId}`,
-      payload: { type: "RunFinished", runId, status: "success", durationMs: Date.now() - runStart }
+      payload: { type: "RunFinished", runId, status: "success", durationMs: Date.now() - runStart },
     });
   } catch (err) {
     runLogger.error({ err, runId }, "run execution failed");
@@ -141,7 +141,7 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
       type: "RunFinished",
       occurredAt: new Date().toISOString(),
       source: `runner:${runnerId}`,
-      payload: { type: "RunFinished", runId, status: "failed", durationMs: Date.now() - runStart }
+      payload: { type: "RunFinished", runId, status: "failed", durationMs: Date.now() - runStart },
     });
   } finally {
     if (heartbeatInterval !== null) clearInterval(heartbeatInterval);

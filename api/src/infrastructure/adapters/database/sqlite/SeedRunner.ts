@@ -10,15 +10,17 @@ export class SeedRunner {
 
   async runSeeds(logger?: unknown): Promise<void> {
     // Check if remediation_rules table exists before seeding
-    const tableCheck = this.db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='remediation_rules'"
-    ).get();
+    const tableCheck = this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='remediation_rules'")
+      .get();
 
     if (!tableCheck) {
       return;
     }
 
-    const countRow = this.db.prepare("SELECT COUNT(*) as count FROM remediation_rules").get() as { count: number };
+    const countRow = this.db.prepare("SELECT COUNT(*) as count FROM remediation_rules").get() as {
+      count: number;
+    };
     if (countRow && countRow.count > 0) {
       return;
     }
@@ -71,11 +73,16 @@ export class SeedRunner {
         autoJson,
         statsJson,
         now,
-        now
+        now,
       );
     })();
 
-    if (logger && typeof logger === "object" && "info" in logger && typeof (logger as { info: unknown }).info === "function") {
+    if (
+      logger &&
+      typeof logger === "object" &&
+      "info" in logger &&
+      typeof (logger as { info: unknown }).info === "function"
+    ) {
       (logger as { info: (msg: string) => void }).info("seeded default remediation rules");
     }
   }

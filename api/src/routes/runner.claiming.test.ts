@@ -45,7 +45,10 @@ describe("internal runner claiming", () => {
 
   it("falls back to legacy runner id when missing x-runner-id", async () => {
     const app = createApp(createSilentLogger());
-    await request(app).post("/internal/runs/claim").set("x-internal-api-key", "internal_test_key").expect(204);
+    await request(app)
+      .post("/internal/runs/claim")
+      .set("x-internal-api-key", "internal_test_key")
+      .expect(204);
 
     expect(mocks.claimNextQueuedRun).toHaveBeenCalledWith("legacy-runner");
   });
@@ -61,4 +64,3 @@ describe("internal runner claiming", () => {
     expect(mocks.heartbeatRun).toHaveBeenCalledWith("abc123", "runner-a");
   });
 });
-

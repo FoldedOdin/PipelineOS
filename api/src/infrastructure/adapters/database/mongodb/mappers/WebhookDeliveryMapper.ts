@@ -7,7 +7,7 @@ export class WebhookDeliveryMapper {
     return {
       id: docAny._id?.toString() ?? doc.deliveryId,
       deliveryId: doc.deliveryId,
-      event: doc.event as "push" | "pull_request",
+      event: doc.event,
       pipelineId: doc.pipelineId,
       createdAt: docAny.createdAt ? new Date(docAny.createdAt) : new Date(),
     };

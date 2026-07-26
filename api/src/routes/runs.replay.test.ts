@@ -35,9 +35,14 @@ describe("POST /api/runs/:id/replay", () => {
     mocks.replayRun.mockResolvedValue(replayed);
     const app = createApp(createSilentLogger());
 
-    const res = await request(app).post("/api/runs/507f1f77bcf86cd799439011/replay").send({ triggeredBy: "operator" }).expect(202);
+    const res = await request(app)
+      .post("/api/runs/507f1f77bcf86cd799439011/replay")
+      .send({ triggeredBy: "operator" })
+      .expect(202);
 
-    expect(mocks.replayRun).toHaveBeenCalledWith("507f1f77bcf86cd799439011", { triggeredBy: "operator" });
+    expect(mocks.replayRun).toHaveBeenCalledWith("507f1f77bcf86cd799439011", {
+      triggeredBy: "operator",
+    });
     expect(res.body).toEqual(replayed);
   });
 

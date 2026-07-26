@@ -15,13 +15,23 @@ export default function App(): ReactElement {
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">PipelineOS</h1>
-            <p className="text-sm text-slate-400">Phase 2 — intelligence (flakiness, diagnosis, trends)</p>
+            <p className="text-sm text-slate-400">
+              Phase 2 — intelligence (flakiness, diagnosis, trends)
+            </p>
           </div>
           <nav className="flex items-center gap-4 text-sm">
-            <Link className="text-slate-300 hover:text-white" to="/runs">Runs</Link>
-            <Link className="text-slate-300 hover:text-white" to="/runners">Runners</Link>
-            <Link className="text-slate-300 hover:text-white" to="/dashboard">Dashboard</Link>
-            <Link className="text-slate-300 hover:text-white" to="/rules">Rules</Link>
+            <Link className="text-slate-300 hover:text-white" to="/runs">
+              Runs
+            </Link>
+            <Link className="text-slate-300 hover:text-white" to="/runners">
+              Runners
+            </Link>
+            <Link className="text-slate-300 hover:text-white" to="/dashboard">
+              Dashboard
+            </Link>
+            <Link className="text-slate-300 hover:text-white" to="/rules">
+              Rules
+            </Link>
             <button
               onClick={() => {
                 void (async () => {

@@ -59,7 +59,13 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
     } else if (configOrPath && typeof configOrPath.getSqlitePath === "function") {
       this.dbPath = configOrPath.getSqlitePath();
     } else {
-      this.dbPath = process.env.PIPELINEOS_SQLITE_PATH ?? process.env.DATA_DIR ? path.join(process.env.DATA_DIR!, "pipelineos.db") : path.join(process.cwd(), "data", "pipelineos.db");
+      if (process.env.PIPELINEOS_SQLITE_PATH) {
+        this.dbPath = process.env.PIPELINEOS_SQLITE_PATH;
+      } else if (process.env.DATA_DIR) {
+        this.dbPath = path.join(process.env.DATA_DIR, "pipelineos.db");
+      } else {
+        this.dbPath = path.join(process.cwd(), "data", "pipelineos.db");
+      }
     }
   }
 
@@ -92,22 +98,26 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
   }
 
   get remediationRuleRepository(): IRemediationRuleRepository {
-    if (!this._remediationRuleRepository) throw new Error("Database not connected. Call connect() first.");
+    if (!this._remediationRuleRepository)
+      throw new Error("Database not connected. Call connect() first.");
     return this._remediationRuleRepository;
   }
 
   get runnerRegistrationRepository(): IRunnerRegistrationRepository {
-    if (!this._runnerRegistrationRepository) throw new Error("Database not connected. Call connect() first.");
+    if (!this._runnerRegistrationRepository)
+      throw new Error("Database not connected. Call connect() first.");
     return this._runnerRegistrationRepository;
   }
 
   get stageFlakinessRepository(): IStageFlakinessRepository {
-    if (!this._stageFlakinessRepository) throw new Error("Database not connected. Call connect() first.");
+    if (!this._stageFlakinessRepository)
+      throw new Error("Database not connected. Call connect() first.");
     return this._stageFlakinessRepository;
   }
 
   get webhookDeliveryRepository(): IWebhookDeliveryRepository {
-    if (!this._webhookDeliveryRepository) throw new Error("Database not connected. Call connect() first.");
+    if (!this._webhookDeliveryRepository)
+      throw new Error("Database not connected. Call connect() first.");
     return this._webhookDeliveryRepository;
   }
 
@@ -121,7 +131,7 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
   }
 
   async connect(logger?: unknown): Promise<void> {
-    if (this.db && this.db.open) {
+    if (this.db?.open) {
       return;
     }
 
@@ -139,13 +149,18 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
 
     this.initRepositories(this.db);
 
-    if (logger && typeof logger === "object" && "info" in logger && typeof (logger as { info: unknown }).info === "function") {
+    if (
+      logger &&
+      typeof logger === "object" &&
+      "info" in logger &&
+      typeof (logger as { info: unknown }).info === "function"
+    ) {
       (logger as { info: (msg: string) => void }).info(`connected to SQLite at ${this.dbPath}`);
     }
   }
 
   async disconnect(): Promise<void> {
-    if (this.db && this.db.open) {
+    if (this.db?.open) {
       this.db.close();
       this.db = null;
     }
@@ -161,7 +176,7 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
 
   async healthCheck(): Promise<DatabaseHealthInfo> {
     try {
-      if (!this.db || !this.db.open) {
+      if (!this.db?.open) {
         return {
           connected: false,
           provider: "sqlite",
@@ -169,8 +184,12 @@ export class SqlitePersistenceAdapter implements IPersistenceAdapter {
         };
       }
 
-      const versionRow = this.db.prepare("SELECT sqlite_version() as version").get() as { version: string };
-      const journalModeRow = this.db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
+      const versionRow = this.db.prepare("SELECT sqlite_version() as version").get() as {
+        version: string;
+      };
+      const journalModeRow = this.db.prepare("PRAGMA journal_mode").get() as {
+        journal_mode: string;
+      };
 
       let migrationVersion: number | undefined;
       try {

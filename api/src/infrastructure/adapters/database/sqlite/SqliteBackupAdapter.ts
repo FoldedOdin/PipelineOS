@@ -12,12 +12,12 @@ import type { SqlitePersistenceAdapter } from "./SqlitePersistenceAdapter.js";
 export class SqliteBackupAdapter implements IBackupAdapter {
   constructor(
     private readonly persistenceAdapter: SqlitePersistenceAdapter,
-    private readonly defaultBackupDirectory: string = path.join(process.cwd(), "data", "backups")
+    private readonly defaultBackupDirectory: string = path.join(process.cwd(), "data", "backups"),
   ) {}
 
   async createBackup(options?: BackupOptions): Promise<BackupMetadata> {
     const db = this.persistenceAdapter.getRawDatabase();
-    if (!db || !db.open) {
+    if (!db?.open) {
       throw new Error("Cannot create backup: database is not connected.");
     }
 
@@ -26,7 +26,8 @@ export class SqliteBackupAdapter implements IBackupAdapter {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const filename = options?.filename ?? `pipelineos-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.db`;
+    const filename =
+      options?.filename ?? `pipelineos-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.db`;
     const targetPath = path.join(targetDir, filename);
 
     await db.backup(targetPath);
@@ -97,9 +98,11 @@ export class SqliteBackupAdapter implements IBackupAdapter {
     return backups;
   }
 
-  async checkpoint(options?: WalCheckpointOptions): Promise<{ checkpointed: boolean; details?: Record<string, unknown> }> {
+  async checkpoint(
+    options?: WalCheckpointOptions,
+  ): Promise<{ checkpointed: boolean; details?: Record<string, unknown> }> {
     const db = this.persistenceAdapter.getRawDatabase();
-    if (!db || !db.open) {
+    if (!db?.open) {
       throw new Error("Cannot run WAL checkpoint: database is not connected.");
     }
 

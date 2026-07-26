@@ -34,5 +34,7 @@ export interface IBackupAdapter {
   /**
    * Performs a database checkpoint if supported (e.g., SQLite WAL checkpoint).
    */
-  checkpoint(options?: WalCheckpointOptions): Promise<{ checkpointed: boolean; details?: Record<string, unknown> }>;
+  checkpoint(
+    options?: WalCheckpointOptions,
+  ): Promise<{ checkpointed: boolean; details?: Record<string, unknown> }>;
 }

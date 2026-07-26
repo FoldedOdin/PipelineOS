@@ -11,7 +11,7 @@ export async function prepareWorkspace(
   runId: string,
   repository: string,
   commitSha: string,
-  logger: Logger
+  logger: Logger,
 ): Promise<string> {
   const root = getRunnerWorkspaceRoot();
   const workspacePath = resolve(join(root, runId));
@@ -28,16 +28,19 @@ export async function prepareWorkspace(
 
   try {
     logger.info({ runId, repoUrl }, "Cloning repository");
-    // Secure fetch: shallow clone for a specific commit. 
+    // Secure fetch: shallow clone for a specific commit.
     // We init an empty repo, fetch the specific sha, and checkout.
     // Setting GIT_TERMINAL_PROMPT=0 prevents interactive prompt hangs on private repos.
     const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 
     await execFileAsync("git", ["init"], { cwd: workspacePath, env });
     await execFileAsync("git", ["remote", "add", "origin", repoUrl], { cwd: workspacePath, env });
-    await execFileAsync("git", ["fetch", "--depth", "1", "origin", commitSha], { cwd: workspacePath, env });
+    await execFileAsync("git", ["fetch", "--depth", "1", "origin", commitSha], {
+      cwd: workspacePath,
+      env,
+    });
     await execFileAsync("git", ["checkout", "FETCH_HEAD"], { cwd: workspacePath, env });
-    
+
     logger.info({ runId, commitSha }, "Repository cloned successfully");
     return workspacePath;
   } catch (err) {
@@ -46,10 +49,7 @@ export async function prepareWorkspace(
   }
 }
 
-export async function cleanWorkspace(
-  runId: string,
-  logger: Logger
-): Promise<void> {
+export async function cleanWorkspace(runId: string, logger: Logger): Promise<void> {
   const root = getRunnerWorkspaceRoot();
   const workspacePath = resolve(join(root, runId));
 

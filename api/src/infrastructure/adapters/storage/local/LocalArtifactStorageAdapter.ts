@@ -5,7 +5,10 @@ import { pipeline } from "node:stream/promises";
 import { BaseLocalFileSystemStorage } from "./BaseLocalFileSystemStorage.js";
 import type { IArtifactStorageAdapter } from "../../../../domain/interfaces/storage/IArtifactStorageAdapter.js";
 
-export class LocalArtifactStorageAdapter extends BaseLocalFileSystemStorage implements IArtifactStorageAdapter {
+export class LocalArtifactStorageAdapter
+  extends BaseLocalFileSystemStorage
+  implements IArtifactStorageAdapter
+{
   constructor(basePath: string) {
     super(basePath);
   }
@@ -15,11 +18,11 @@ export class LocalArtifactStorageAdapter extends BaseLocalFileSystemStorage impl
     runId: string,
     stageName: string,
     fileName: string,
-    stream: Readable
+    stream: Readable,
   ): Promise<void> {
     const filePath = this.getPath(pipelineId, runId, stageName, fileName);
     await this.ensureDirectoryForFile(filePath);
-    
+
     const writeStream = createWriteStream(filePath);
     await pipeline(stream, writeStream);
   }
@@ -28,10 +31,10 @@ export class LocalArtifactStorageAdapter extends BaseLocalFileSystemStorage impl
     pipelineId: string,
     runId: string,
     stageName: string,
-    fileName: string
+    fileName: string,
   ): Promise<Readable> {
     const filePath = this.getPath(pipelineId, runId, stageName, fileName);
-    
+
     try {
       await fs.access(filePath);
     } catch {

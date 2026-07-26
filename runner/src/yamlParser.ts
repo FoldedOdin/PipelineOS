@@ -15,7 +15,8 @@ function readStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) throw new Error(`invalid ${field}: expected array`);
   const items: string[] = [];
   for (const item of value) {
-    if (typeof item !== "string" || item.trim() === "") throw new Error(`invalid ${field}: expected string values`);
+    if (typeof item !== "string" || item.trim() === "")
+      throw new Error(`invalid ${field}: expected string values`);
     items.push(item);
   }
   return items;
@@ -41,7 +42,12 @@ function readOptionalEnv(value: unknown, field: string): Record<string, string> 
 
 function readOptionalInt(value: unknown, field: string): number | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value <= 0
+  ) {
     throw new Error(`invalid ${field}: expected positive integer`);
   }
   return value;
@@ -74,12 +80,18 @@ export function parsePipelineYaml(raw: string): PipelineDefinition {
     const stageName = requiredString(stage.name, `stages[${String(idx)}].name`);
     const image = requiredString(stage.image, `stages[${String(idx)}].image`);
     const run = requiredString(stage.run, `stages[${String(idx)}].run`);
-    const depends_on = readOptionalStringArray(stage.depends_on, `stages[${String(idx)}].depends_on`);
+    const depends_on = readOptionalStringArray(
+      stage.depends_on,
+      `stages[${String(idx)}].depends_on`,
+    );
     const env = readOptionalEnv(stage.env, `stages[${String(idx)}].env`);
-    const timeout_minutes = readOptionalInt(stage.timeout_minutes, `stages[${String(idx)}].timeout_minutes`);
-    
+    const timeout_minutes = readOptionalInt(
+      stage.timeout_minutes,
+      `stages[${String(idx)}].timeout_minutes`,
+    );
+
     const artifacts = readOptionalStringArray(stage.artifacts, `stages[${String(idx)}].artifacts`);
-    
+
     let cache: { key: string; paths: string[] } | undefined = undefined;
     if (stage.cache !== undefined && stage.cache !== null) {
       if (typeof stage.cache !== "object" || Array.isArray(stage.cache)) {
@@ -101,7 +113,8 @@ export function parsePipelineYaml(raw: string): PipelineDefinition {
   }
   for (const s of stages) {
     for (const dep of s.depends_on) {
-      if (!nameSet.has(dep)) throw new Error(`invalid stages: "${s.name}" depends_on missing stage "${dep}"`);
+      if (!nameSet.has(dep))
+        throw new Error(`invalid stages: "${s.name}" depends_on missing stage "${dep}"`);
     }
   }
 

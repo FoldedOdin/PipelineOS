@@ -24,4 +24,3 @@ export const requireInternalApiKey: RequestHandler = (req, res, next) => {
 
   next();
 };
-

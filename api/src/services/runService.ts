@@ -44,11 +44,17 @@ export const runService = {
     return run === null ? null : (run as unknown as Record<string, unknown>);
   },
 
-  async replayRun(id: string, options: ReplayRunOptions = {}): Promise<Record<string, unknown> | null> {
+  async replayRun(
+    id: string,
+    options: ReplayRunOptions = {},
+  ): Promise<Record<string, unknown> | null> {
     const source = await container.persistence.runRepository.findById(id);
     if (source === null) return null;
 
-    const triggeredBy = typeof options.triggeredBy === "string" && options.triggeredBy.trim() !== "" ? options.triggeredBy.trim() : "replay";
+    const triggeredBy =
+      typeof options.triggeredBy === "string" && options.triggeredBy.trim() !== ""
+        ? options.triggeredBy.trim()
+        : "replay";
     const replay = await container.persistence.runRepository.create({
       pipelineId: source.pipelineId,
       commitSha: source.commitSha,

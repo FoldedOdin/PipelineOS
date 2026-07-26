@@ -22,7 +22,10 @@ const RunnerRegistrationSchema = new Schema(
     activeRuns: { type: Number },
     maxConcurrentRuns: { type: Number },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const RunnerRegistration = mongoose.model<IRunnerRegistration>("RunnerRegistration", RunnerRegistrationSchema);
+export const RunnerRegistration = mongoose.model<IRunnerRegistration>(
+  "RunnerRegistration",
+  RunnerRegistrationSchema,
+);

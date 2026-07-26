@@ -40,7 +40,10 @@ export function startStaleRunRecovery(logger: Logger): { stop: () => void } {
         stages: updatedStages,
       });
 
-      logger.warn({ runId: run.id, eventName: "stale_run_recovered" }, "marked stale run as failed");
+      logger.warn(
+        { runId: run.id, eventName: "stale_run_recovered" },
+        "marked stale run as failed",
+      );
     }
   };
 

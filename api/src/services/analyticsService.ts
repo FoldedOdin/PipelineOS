@@ -12,7 +12,9 @@ export const analyticsService = {
     const dayCount = Math.min(90, Math.max(1, Math.floor(days)));
     const end = new Date();
     end.setUTCHours(23, 59, 59, 999);
-    const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - (dayCount - 1)));
+    const start = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - (dayCount - 1)),
+    );
     start.setUTCHours(0, 0, 0, 0);
 
     const runs = await container.persistence.runRepository.findRecent({
@@ -22,7 +24,9 @@ export const analyticsService = {
 
     const buckets = new Map<string, { total: number; failed: number; success: number }>();
     for (let i = 0; i < dayCount; i += 1) {
-      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + i));
+      const d = new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + i),
+      );
       const key = d.toISOString().slice(0, 10);
       buckets.set(key, { total: 0, failed: 0, success: 0 });
     }

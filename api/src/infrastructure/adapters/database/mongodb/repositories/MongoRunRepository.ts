@@ -19,10 +19,7 @@ export class MongoRunRepository implements IRunRepository {
   }
 
   async findByPipeline(pipelineId: string, limit = 50): Promise<RunDTO[]> {
-    const docs = await Run.find({ pipelineId })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .exec();
+    const docs = await Run.find({ pipelineId }).sort({ createdAt: -1 }).limit(limit).exec();
     return docs.map((d: unknown) => RunMapper.toDTO(d as RunDocument));
   }
 
@@ -32,10 +29,7 @@ export class MongoRunRepository implements IRunRepository {
     if (options?.since) {
       filter.createdAt = { $gte: new Date(options.since) };
     }
-    const docs = await Run.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .exec();
+    const docs = await Run.find(filter).sort({ createdAt: -1 }).limit(limit).exec();
     return docs.map((d: unknown) => RunMapper.toDTO(d as RunDocument));
   }
 
@@ -46,11 +40,7 @@ export class MongoRunRepository implements IRunRepository {
   async findPaginated(options: { skip?: number; limit?: number }): Promise<RunDTO[]> {
     const skip = options.skip ?? 0;
     const limit = options.limit ?? 20;
-    const docs = await Run.find({})
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
+    const docs = await Run.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).exec();
     return docs.map((d: unknown) => RunMapper.toDTO(d as RunDocument));
   }
 
@@ -73,7 +63,11 @@ export class MongoRunRepository implements IRunRepository {
     return docs.map((d: unknown) => RunMapper.toDTO(d as RunDocument));
   }
 
-  async topStageCosts(pipelineId: string, limit: number, since: Date): Promise<StageCostAggregateDTO[]> {
+  async topStageCosts(
+    pipelineId: string,
+    limit: number,
+    since: Date,
+  ): Promise<StageCostAggregateDTO[]> {
     const rows = await Run.aggregate<{
       _id: string;
       runs: number;
@@ -145,11 +139,7 @@ export class MongoRunRepository implements IRunRepository {
       setFields.remediationHistory = updates.remediationHistory;
     }
 
-    const doc = await Run.findByIdAndUpdate(
-      runId,
-      { $set: setFields },
-      { new: true }
-    ).exec();
+    const doc = await Run.findByIdAndUpdate(runId, { $set: setFields }, { new: true }).exec();
     return doc ? RunMapper.toDTO(doc as unknown as RunDocument) : null;
   }
 
@@ -170,12 +160,15 @@ export class MongoRunRepository implements IRunRepository {
           claimExpiresAt: leaseUntil,
         },
       },
-      { sort: { createdAt: 1 }, new: true }
+      { sort: { createdAt: 1 }, new: true },
     ).exec();
     return doc ? RunMapper.toDTO(doc as unknown as RunDocument) : null;
   }
 
-  async addRemediationHistory(runId: string, attempt: RemediationAttemptDTO): Promise<RunDTO | null> {
+  async addRemediationHistory(
+    runId: string,
+    attempt: RemediationAttemptDTO,
+  ): Promise<RunDTO | null> {
     if (!isValidObjectId(runId)) return null;
     const doc = await Run.findByIdAndUpdate(
       runId,
@@ -184,7 +177,7 @@ export class MongoRunRepository implements IRunRepository {
           remediationHistory: attempt as unknown as never,
         },
       },
-      { new: true }
+      { new: true },
     ).exec();
     return doc ? RunMapper.toDTO(doc as unknown as RunDocument) : null;
   }

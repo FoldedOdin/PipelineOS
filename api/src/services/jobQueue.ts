@@ -116,4 +116,3 @@ export function startGithubWebhookWorker(logger: Logger): { stop: () => Promise<
     },
   };
 }
-

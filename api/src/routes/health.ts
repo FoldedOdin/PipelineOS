@@ -15,7 +15,7 @@ healthRouter.get("/health", async (_req, res) => {
     services: {
       mongo: dbStatus,
       database: dbHealth,
-      api: "up"
-    }
+      api: "up",
+    },
   });
 });

@@ -27,7 +27,8 @@ export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
     if (type === "hello") {
       const runId = (parsed as Record<string, unknown>).runId;
       const timestamp = (parsed as Record<string, unknown>).timestamp;
-      if (typeof runId === "string" && typeof timestamp === "string") return { type, runId, timestamp };
+      if (typeof runId === "string" && typeof timestamp === "string")
+        return { type, runId, timestamp };
       return null;
     }
     if (type === "log") {
@@ -35,7 +36,12 @@ export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
       const stageName = (parsed as Record<string, unknown>).stageName;
       const chunk = (parsed as Record<string, unknown>).chunk;
       const timestamp = (parsed as Record<string, unknown>).timestamp;
-      if (typeof runId === "string" && typeof stageName === "string" && typeof chunk === "string" && typeof timestamp === "string") {
+      if (
+        typeof runId === "string" &&
+        typeof stageName === "string" &&
+        typeof chunk === "string" &&
+        typeof timestamp === "string"
+      ) {
         return { type, runId, stageName, chunk, timestamp };
       }
       return null;
@@ -45,7 +51,12 @@ export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
       const stageName = (parsed as Record<string, unknown>).stageName;
       const status = (parsed as Record<string, unknown>).status;
       const timestamp = (parsed as Record<string, unknown>).timestamp;
-      if (typeof runId === "string" && typeof stageName === "string" && typeof status === "string" && typeof timestamp === "string") {
+      if (
+        typeof runId === "string" &&
+        typeof stageName === "string" &&
+        typeof status === "string" &&
+        typeof timestamp === "string"
+      ) {
         return { type, runId, stageName, status, timestamp };
       }
       return null;
@@ -54,7 +65,8 @@ export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
       const runId = (parsed as Record<string, unknown>).runId;
       const status = (parsed as Record<string, unknown>).status;
       const timestamp = (parsed as Record<string, unknown>).timestamp;
-      if (typeof runId === "string" && typeof status === "string" && typeof timestamp === "string") return { type, runId, status, timestamp };
+      if (typeof runId === "string" && typeof status === "string" && typeof timestamp === "string")
+        return { type, runId, status, timestamp };
       return null;
     }
     return null;
@@ -63,7 +75,10 @@ export function parseLogStreamEvent(raw: string): LogStreamEvent | null {
   }
 }
 
-export function splitLinesPreservingRemainder(input: string): { lines: string[]; remainder: string } {
+export function splitLinesPreservingRemainder(input: string): {
+  lines: string[];
+  remainder: string;
+} {
   const normalized = input.replaceAll("\r\n", "\n");
   const parts = normalized.split("\n");
   if (parts.length <= 1) return { lines: [], remainder: normalized };
@@ -110,7 +125,10 @@ export function useLogStream(runId: string | undefined): {
       const raw = typeof event.data === "string" ? event.data : "";
       const parsed = parseLogStreamEvent(raw);
       if (parsed === null) {
-        linesRef.current = [...linesRef.current, { stageName: "stream", line: raw, timestamp: new Date().toISOString() }].slice(-maxLines);
+        linesRef.current = [
+          ...linesRef.current,
+          { stageName: "stream", line: raw, timestamp: new Date().toISOString() },
+        ].slice(-maxLines);
         setState({ status: "open", lines: linesRef.current });
         return;
       }
@@ -123,7 +141,11 @@ export function useLogStream(runId: string | undefined): {
         if (lines.length > 0) {
           const next = [
             ...linesRef.current,
-            ...lines.map((line) => ({ stageName: parsed.stageName, line, timestamp: parsed.timestamp })),
+            ...lines.map((line) => ({
+              stageName: parsed.stageName,
+              line,
+              timestamp: parsed.timestamp,
+            })),
           ].slice(-maxLines);
           linesRef.current = next;
           setState({ status: "open", lines: next });
@@ -134,7 +156,11 @@ export function useLogStream(runId: string | undefined): {
       if (parsed.type === "stage_status") {
         const next = [
           ...linesRef.current,
-          { stageName: parsed.stageName, line: `stage ${parsed.stageName} -> ${parsed.status}`, timestamp: parsed.timestamp },
+          {
+            stageName: parsed.stageName,
+            line: `stage ${parsed.stageName} -> ${parsed.status}`,
+            timestamp: parsed.timestamp,
+          },
         ].slice(-maxLines);
         linesRef.current = next;
         setState({ status: "open", lines: next });
