@@ -1,0 +1,15 @@
+stages:
+  - name: build
+    image: alpine:latest
+    run: |
+      echo "=== BUILDING ==="
+      echo "Starting build stage..."
+      sleep 1
+      echo "Build completed successfully."
+  - name: test
+    image: alpine:latest
+    run: |
+      echo "=== TESTING ==="
+      echo "Running unit tests..."
+      sleep 1
+      echo "All tests passed!"

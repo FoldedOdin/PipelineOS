@@ -3,6 +3,7 @@ import fetch from 'node-fetch';
 import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import path from 'node:path';
+import fs from 'node:fs';
 
 dotenv.config({ path: path.resolve(process.cwd(), 'deploy/.env') });
 
@@ -29,7 +30,18 @@ async function main() {
   const commitSha = 'seed';
   const pipelineId = 'foldedodin/PipelineOS';
 
-  // 1. Seed the mock pipeline config into the database
+  // 1. Read the local .pipelineos.yml config file
+  let rawYaml;
+  try {
+    const yamlPath = path.resolve(process.cwd(), '.pipelineos.yml');
+    rawYaml = await fs.promises.readFile(yamlPath, 'utf8');
+    console.log('Loaded pipeline configuration from .pipelineos.yml');
+  } catch (err) {
+    console.error('Error: Could not find or read .pipelineos.yml at the repository root.');
+    process.exit(1);
+  }
+
+  // 2. Seed the mock pipeline config into the database
   console.log('Seeding mock pipeline config...');
   const seedRes = await fetch(`${apiBase}/internal/seed/pipelines`, {
     method: 'POST',
@@ -39,23 +51,7 @@ async function main() {
     },
     body: JSON.stringify({
       pipelineId,
-      rawYaml: `
-stages:
-  - name: build
-    image: alpine:latest
-    run: |
-      echo "=== BUILDING ==="
-      echo "Starting build stage..."
-      sleep 1
-      echo "Build completed successfully."
-  - name: test
-    image: alpine:latest
-    run: |
-      echo "=== TESTING ==="
-      echo "Running unit tests..."
-      sleep 1
-      echo "All tests passed!"
-`
+      rawYaml
     })
   });
 
