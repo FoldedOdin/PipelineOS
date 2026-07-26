@@ -24,9 +24,21 @@ function generateJwt(username, secretKey) {
   return `${header}.${payload}.${signature}`;
 }
 
+import { execSync } from 'node:child_process';
+
 async function main() {
-  const commitSha = 'seed';
+  let commitSha = 'b85fe1c13a9f1db91e61893cb85d9d808b382640';
+  try {
+    commitSha = execSync('git rev-parse HEAD', {
+      cwd: '/home/foldedodin/Storage/Projects/Freelance/kpm-clinic/',
+      encoding: 'utf8'
+    }).trim();
+    console.log('Resolved latest kpm-clinic commit SHA:', commitSha);
+  } catch (err) {
+    console.warn('Could not resolve latest commit from git, using fallback.');
+  }
   const pipelineId = 'foldedodin/kpm-clinic';
+
 
   // 1. Read the local .pipelineos.yml from the freelance project path
   const yamlPath = '/home/foldedodin/Storage/Projects/Freelance/kpm-clinic/.pipelineos.yml';
