@@ -41,11 +41,23 @@ function asString(value: unknown): string | null {
 }
 
 function asRunStatus(value: unknown): RunStatus | null {
-  return value === "queued" || value === "running" || value === "success" || value === "failed" || value === "cancelled" ? value : null;
+  return value === "queued" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "cancelled"
+    ? value
+    : null;
 }
 
 function asStageStatus(value: unknown): StageStatus | null {
-  return value === "pending" || value === "running" || value === "success" || value === "failed" || value === "skipped" ? value : null;
+  return value === "pending" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "skipped"
+    ? value
+    : null;
 }
 
 function formatMs(ms: unknown): string {
@@ -78,16 +90,25 @@ function parseRun(payload: unknown): RunView | null {
       const image = asString(st.image);
       const logs = typeof st.logs === "string" ? st.logs : "";
       const durationLabel = formatMs(st.durationMs);
-      const metricsRaw = typeof st.metrics === "object" && st.metrics !== null ? (st.metrics as Record<string, unknown>) : null;
+      const metricsRaw =
+        typeof st.metrics === "object" && st.metrics !== null
+          ? (st.metrics as Record<string, unknown>)
+          : null;
       const metrics =
         metricsRaw === null
           ? null
           : {
               cpuSeconds: typeof metricsRaw.cpuSeconds === "number" ? metricsRaw.cpuSeconds : null,
-              cpuPercentAvg: typeof metricsRaw.cpuPercentAvg === "number" ? metricsRaw.cpuPercentAvg : null,
-              cpuPercentMax: typeof metricsRaw.cpuPercentMax === "number" ? metricsRaw.cpuPercentMax : null,
-              memBytesMax: typeof metricsRaw.memBytesMax === "number" ? metricsRaw.memBytesMax : null,
-              costUsdEstimated: typeof metricsRaw.costUsdEstimated === "number" ? metricsRaw.costUsdEstimated : null,
+              cpuPercentAvg:
+                typeof metricsRaw.cpuPercentAvg === "number" ? metricsRaw.cpuPercentAvg : null,
+              cpuPercentMax:
+                typeof metricsRaw.cpuPercentMax === "number" ? metricsRaw.cpuPercentMax : null,
+              memBytesMax:
+                typeof metricsRaw.memBytesMax === "number" ? metricsRaw.memBytesMax : null,
+              costUsdEstimated:
+                typeof metricsRaw.costUsdEstimated === "number"
+                  ? metricsRaw.costUsdEstimated
+                  : null,
             };
       if (!name || !stageStatus || !image) continue;
       stages.push({ name, status: stageStatus, image, durationLabel, logs, metrics });
@@ -153,8 +174,13 @@ export default function RunDetail(): ReactElement {
               setReplayStatus("Queueing replay…");
               void (async () => {
                 try {
-                  const raw = await apiPostJson(`/api/runs/${id}/replay`, { triggeredBy: "dashboard" });
-                  const nextId = typeof raw === "object" && raw !== null ? asString((raw as Record<string, unknown>)._id) : null;
+                  const raw = await apiPostJson(`/api/runs/${id}/replay`, {
+                    triggeredBy: "dashboard",
+                  });
+                  const nextId =
+                    typeof raw === "object" && raw !== null
+                      ? asString((raw as Record<string, unknown>)._id)
+                      : null;
                   if (nextId === null) {
                     setReplayStatus("Replay queued, but the response did not include a run id.");
                     return;
@@ -174,7 +200,10 @@ export default function RunDetail(): ReactElement {
           >
             View live logs
           </Link>
-          <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800" to="/runs">
+          <Link
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-800"
+            to="/runs"
+          >
             Back
           </Link>
         </div>
@@ -188,91 +217,113 @@ export default function RunDetail(): ReactElement {
       ) : null}
 
       {replayStatus !== undefined ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-300">{replayStatus}</div>
+        <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-300">
+          {replayStatus}
+        </div>
       ) : null}
 
-      {payload !== undefined ? (
-        (() => {
-          const run = parseRun(payload);
-          if (run === null) {
-            return (
-              <pre className="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-black/40 p-4 text-xs text-slate-200">
-                {JSON.stringify(payload, null, 2)}
-              </pre>
-            );
-          }
+      {payload !== undefined
+        ? (() => {
+            const run = parseRun(payload);
+            if (run === null) {
+              return (
+                <pre className="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-black/40 p-4 text-xs text-slate-200">
+                  {JSON.stringify(payload, null, 2)}
+                </pre>
+              );
+            }
 
-          return (
-            <div className="space-y-5">
-              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-sm text-slate-300">
-                      <span className="text-slate-500">Pipeline:</span> <span className="font-medium text-white">{run.pipelineId}</span>
-                    </p>
-                    <p className="text-sm text-slate-300">
-                      <span className="text-slate-500">Branch:</span> <span className="font-mono text-white">{run.branch}</span>
-                      <span className="mx-2 text-slate-600">·</span>
-                      <span className="text-slate-500">Commit:</span> <span className="font-mono text-white">{run.commitSha.slice(0, 12)}</span>
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      <span className="text-slate-500">Triggered by:</span> {run.triggeredBy}
-                    </p>
+            return (
+              <div className="space-y-5">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm text-slate-300">
+                        <span className="text-slate-500">Pipeline:</span>{" "}
+                        <span className="font-medium text-white">{run.pipelineId}</span>
+                      </p>
+                      <p className="text-sm text-slate-300">
+                        <span className="text-slate-500">Branch:</span>{" "}
+                        <span className="font-mono text-white">{run.branch}</span>
+                        <span className="mx-2 text-slate-600">·</span>
+                        <span className="text-slate-500">Commit:</span>{" "}
+                        <span className="font-mono text-white">{run.commitSha.slice(0, 12)}</span>
+                      </p>
+                      <p className="text-sm text-slate-400">
+                        <span className="text-slate-500">Triggered by:</span> {run.triggeredBy}
+                      </p>
+                    </div>
+                    <StatusBadge status={run.status} />
                   </div>
-                  <StatusBadge status={run.status} />
+                </div>
+
+                <div className="space-y-3">
+                  <RunTimeline
+                    stages={run.stages.map((stage) => ({
+                      name: stage.name,
+                      status: stage.status,
+                      durationLabel: stage.durationLabel,
+                    }))}
+                  />
+                  <h3 className="text-sm font-semibold text-slate-200">Stages</h3>
+                  {run.stages.length === 0 ? (
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
+                      No stages yet. If this run is queued/running, open live logs to watch stages
+                      appear.
+                    </div>
+                  ) : (
+                    run.stages.map((stage) => (
+                      <StageRow
+                        key={stage.name}
+                        name={stage.name}
+                        status={stage.status}
+                        image={stage.image}
+                        durationLabel={stage.durationLabel}
+                      >
+                        {stage.metrics !== null ? (
+                          <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                            <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                              cpu:{" "}
+                              {stage.metrics.cpuSeconds !== null
+                                ? `${stage.metrics.cpuSeconds.toFixed(2)}s`
+                                : "—"}
+                            </span>
+                            <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                              cpu% avg:{" "}
+                              {stage.metrics.cpuPercentAvg !== null
+                                ? stage.metrics.cpuPercentAvg.toFixed(1)
+                                : "—"}
+                            </span>
+                            <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
+                              mem max:{" "}
+                              {stage.metrics.memBytesMax !== null
+                                ? `${(stage.metrics.memBytesMax / 1024 / 1024).toFixed(1)} MiB`
+                                : "—"}
+                            </span>
+                            <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono text-amber-200">
+                              cost:{" "}
+                              {stage.metrics.costUsdEstimated !== null
+                                ? `$${stage.metrics.costUsdEstimated.toFixed(4)}`
+                                : "—"}
+                            </span>
+                          </div>
+                        ) : null}
+                        <LogViewer
+                          text={stage.logs.length > 0 ? stage.logs : "No stored logs yet."}
+                        />
+                        <DiagnosisCard
+                          runId={run.id}
+                          stageName={stage.name}
+                          status={stage.status}
+                        />
+                      </StageRow>
+                    ))
+                  )}
                 </div>
               </div>
-
-              <div className="space-y-3">
-                <RunTimeline
-                  stages={run.stages.map((stage) => ({
-                    name: stage.name,
-                    status: stage.status,
-                    durationLabel: stage.durationLabel,
-                  }))}
-                />
-                <h3 className="text-sm font-semibold text-slate-200">Stages</h3>
-                {run.stages.length === 0 ? (
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
-                    No stages yet. If this run is queued/running, open live logs to watch stages appear.
-                  </div>
-                ) : (
-                  run.stages.map((stage) => (
-                    <StageRow
-                      key={stage.name}
-                      name={stage.name}
-                      status={stage.status}
-                      image={stage.image}
-                      durationLabel={stage.durationLabel}
-                    >
-                      {stage.metrics !== null ? (
-                        <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
-                            cpu: {stage.metrics.cpuSeconds !== null ? `${stage.metrics.cpuSeconds.toFixed(2)}s` : "—"}
-                          </span>
-                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
-                            cpu% avg: {stage.metrics.cpuPercentAvg !== null ? stage.metrics.cpuPercentAvg.toFixed(1) : "—"}
-                          </span>
-                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono">
-                            mem max:{" "}
-                            {stage.metrics.memBytesMax !== null ? `${(stage.metrics.memBytesMax / 1024 / 1024).toFixed(1)} MiB` : "—"}
-                          </span>
-                          <span className="rounded border border-slate-800 bg-black/30 px-2 py-1 font-mono text-amber-200">
-                            cost:{" "}
-                            {stage.metrics.costUsdEstimated !== null ? `$${stage.metrics.costUsdEstimated.toFixed(4)}` : "—"}
-                          </span>
-                        </div>
-                      ) : null}
-                      <LogViewer text={stage.logs.length > 0 ? stage.logs : "No stored logs yet."} />
-                      <DiagnosisCard runId={run.id} stageName={stage.name} status={stage.status} />
-                    </StageRow>
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })()
-      ) : null}
+            );
+          })()
+        : null}
     </div>
   );
 }
