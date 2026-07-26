@@ -1,7 +1,7 @@
 import { container } from "../bootstrap/index.js";
 import type { UpdateRunInput } from "../domain/index.js";
 import { flakinessService } from "../services/flakinessService.js";
-import { publishRunStatus, publishStageLog, publishStageStatus } from "../ws/logStream.js";
+import { observabilityService } from "../services/observabilityService.js";
 import { pino } from "pino";
 
 const runnerServiceLogger = pino({ name: "runnerService" });
@@ -40,11 +40,23 @@ function readNullableNumberField(body: unknown, key: string): number | null {
 }
 
 function isStageStatus(value: unknown): value is StageStatus {
-  return value === "pending" || value === "running" || value === "success" || value === "failed" || value === "skipped";
+  return (
+    value === "pending" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "skipped"
+  );
 }
 
 function isRunStatus(value: unknown): value is RunStatus {
-  return value === "queued" || value === "running" || value === "success" || value === "failed" || value === "cancelled";
+  return (
+    value === "queued" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "cancelled"
+  );
 }
 
 export const runnerService = {
@@ -64,7 +76,7 @@ export const runnerService = {
 
   async heartbeatRun(runId: string, runnerId: RunnerId): Promise<boolean> {
     const run = await container.persistence.runRepository.findById(runId);
-    if (!run || run.status !== "running" || run.claimedBy !== runnerId) return false;
+    if (run?.status !== "running" || run.claimedBy !== runnerId) return false;
 
     const now = new Date();
     const leaseUntil = new Date(now.getTime() + claimLeaseMs);
@@ -79,13 +91,25 @@ export const runnerService = {
         lastHeartbeatAt: now,
         status: "online",
       });
-      runnerServiceLogger.debug({ event: "run_heartbeat", runId, runnerId }, "Run heartbeat received");
+      runnerServiceLogger.debug(
+        { event: "run_heartbeat", runId, runnerId },
+        "Run heartbeat received",
+      );
     }
 
     return updated !== null;
   },
 
-  async registerRunner(runnerId: string, info?: { version?: string; hostname?: string; platform?: string; activeRuns?: number; maxConcurrentRuns?: number }): Promise<void> {
+  async registerRunner(
+    runnerId: string,
+    info?: {
+      version?: string;
+      hostname?: string;
+      platform?: string;
+      activeRuns?: number;
+      maxConcurrentRuns?: number;
+    },
+  ): Promise<void> {
     const patch = info ?? {};
     await container.persistence.runnerRegistrationRepository.registerOrHeartbeat({
       runnerId,
@@ -110,8 +134,21 @@ export const runnerService = {
     });
   },
 
+  async getRunnerHealth(runnerId: string): Promise<(Record<string, unknown> & { isStale: boolean }) | null> {
+    const RUNNER_STALE_MS = 30_000;
+    const runners = await container.persistence.runnerRegistrationRepository.findAll();
+    const runner = runners.find((r) => r.runnerId === runnerId);
+    if (!runner) return null;
+    const now = Date.now();
+    const hb = runner.lastHeartbeatAt?.getTime() ?? 0;
+    return { ...runner, isStale: now - hb > RUNNER_STALE_MS };
+  },
+
   async updateRunStatus(runId: string, body: unknown): Promise<Record<string, unknown> | null> {
-    const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
+    const statusValue =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).status
+        : undefined;
     const status = isRunStatus(statusValue) ? statusValue : null;
     if (status === null) return null;
 
@@ -124,7 +161,10 @@ export const runnerService = {
 
     const updated = await container.persistence.runRepository.update(runId, patch);
     if (updated !== null) {
-      publishRunStatus(runId, status);
+      observabilityService.ingestBatch([{
+        type: "RunStatusChanged",
+        payload: { runId, status },
+      }]);
       return { ...updated, _id: updated.id };
     }
     return null;
@@ -171,13 +211,19 @@ export const runnerService = {
     if (updated !== null) {
       // Notify WebSocket subscribers that a new stage has been registered.
       const newIdx = index >= 0 ? index : stages.length - 1;
-      publishStageStatus(runId, stageName, stages[newIdx]?.status ?? "pending");
+      observabilityService.ingestBatch([{
+        type: "StageStatusChanged",
+        payload: { runId, stageName, status: stages[newIdx]?.status ?? "pending" },
+      }]);
     }
     return updated !== null;
   },
 
   async updateStageStatus(runId: string, stageName: string, body: unknown): Promise<boolean> {
-    const statusValue = typeof body === "object" && body !== null ? (body as Record<string, unknown>).status : undefined;
+    const statusValue =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).status
+        : undefined;
     const status = isStageStatus(statusValue) ? statusValue : null;
     const exitCode = readNumberField(body, "exitCode");
     if (status === null) return false;
@@ -209,7 +255,10 @@ export const runnerService = {
     const updated = await container.persistence.runRepository.update(runId, { stages });
     if (!updated) return false;
 
-    publishStageStatus(runId, stageName, status);
+    observabilityService.ingestBatch([{
+      type: "StageStatusChanged",
+      payload: { runId, stageName, status },
+    }]);
 
     if (status === "success" || status === "failed") {
       const pipelineId = run.pipelineId;
@@ -246,7 +295,10 @@ export const runnerService = {
       return false;
     }
 
-    publishStageLog(runId, stageName, chunk);
+    observabilityService.ingestBatch([{
+      type: "LogChunkReceived",
+      payload: { type: "log", runId, stageName, chunk, timestamp: new Date().toISOString() },
+    }]);
     return true;
   },
 

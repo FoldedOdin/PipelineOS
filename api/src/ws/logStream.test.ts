@@ -27,7 +27,10 @@ function makeRes() {
   return {
     setHeader: vi.fn(),
     flushHeaders: vi.fn(),
-    write: vi.fn((data: string) => { written.push(data); return true; }),
+    write: vi.fn((data: string) => {
+      written.push(data);
+      return true;
+    }),
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     on: vi.fn(),
@@ -39,31 +42,16 @@ function makeReq(id = "run-xyz") {
   const listeners: Record<string, () => void> = {};
   return {
     params: { id },
-    on: vi.fn((event: string, cb: () => void) => { listeners[event] = cb; }),
-    _emit: (event: string) => listeners[event]?.(),
+    on: vi.fn((event: string, cb: () => void) => {
+      listeners[event] = cb;
+    }),
+    _emit: (event: string) => {
+      listeners[event]?.();
+    },
   };
 }
 
-// ── publish guards ─────────────────────────────────────────────────────────
-
-describe("publisher guards", () => {
-  it("publishStageLog ignores empty runId", async () => {
-    const { publishStageLog } = await import("./logStream.js");
-    // Should not throw
-    expect(() => publishStageLog("", "build", "chunk")).not.toThrow();
-  });
-
-  it("publishStageStatus ignores empty status", async () => {
-    const { publishStageStatus } = await import("./logStream.js");
-    expect(() => publishStageStatus("run-1", "build", "")).not.toThrow();
-  });
-
-  it("publishRunStatus ignores empty runId", async () => {
-    const { publishRunStatus } = await import("./logStream.js");
-    expect(() => publishRunStatus("", "success")).not.toThrow();
-  });
-});
-
+// ── publish guards (removed since publisher functions are gone) ─────────────
 // ── SSE endpoint ───────────────────────────────────────────────────────────
 
 describe("handleSseStream", () => {
@@ -104,42 +92,52 @@ describe("handleSseStream", () => {
   });
 
   it("broadcasts log events to registered SSE clients", async () => {
-    const { handleSseStream, publishStageLog } = await import("./logStream.js");
+    const { handleSseStream } = await import("./logStream.js");
+    const { observabilityService } = await import("../services/observabilityService.js");
     const req = makeReq("run-sse-1");
     const res = makeRes();
 
     handleSseStream(req as never, res as never);
     res.write.mockClear(); // clear hello event
 
-    publishStageLog("run-sse-1", "test", "hello from runner");
+    observabilityService.ingestBatch([{ type: "log", payload: { runId: "run-sse-1" }, chunk: "hello from runner" }]);
 
-    expect(res.written.some((d) => d.includes('"type":"log"') && d.includes("hello from runner"))).toBe(true);
+    expect(
+      res.written.some((d) => d.includes('"type":"log"') && d.includes("hello from runner")),
+    ).toBe(true);
   });
 
   it("broadcasts stage_status events to registered SSE clients", async () => {
-    const { handleSseStream, publishStageStatus } = await import("./logStream.js");
+    const { handleSseStream } = await import("./logStream.js");
+    const { observabilityService } = await import("../services/observabilityService.js");
     const req = makeReq("run-sse-2");
     const res = makeRes();
 
     handleSseStream(req as never, res as never);
-    publishStageStatus("run-sse-2", "build", "success");
+    observabilityService.ingestBatch([{ type: "stage_status", payload: { runId: "run-sse-2" }, status: "success" }]);
 
-    expect(res.written.some((d) => d.includes('"type":"stage_status"') && d.includes('"success"'))).toBe(true);
+    expect(
+      res.written.some((d) => d.includes('"type":"stage_status"') && d.includes('"success"')),
+    ).toBe(true);
   });
 
   it("broadcasts run_status events to registered SSE clients", async () => {
-    const { handleSseStream, publishRunStatus } = await import("./logStream.js");
+    const { handleSseStream } = await import("./logStream.js");
+    const { observabilityService } = await import("../services/observabilityService.js");
     const req = makeReq("run-sse-3");
     const res = makeRes();
 
     handleSseStream(req as never, res as never);
-    publishRunStatus("run-sse-3", "failed");
+    observabilityService.ingestBatch([{ type: "run_status", payload: { runId: "run-sse-3" }, status: "failed" }]);
 
-    expect(res.written.some((d) => d.includes('"type":"run_status"') && d.includes('"failed"'))).toBe(true);
+    expect(
+      res.written.some((d) => d.includes('"type":"run_status"') && d.includes('"failed"')),
+    ).toBe(true);
   });
 
   it("cleans up SSE client on request close", async () => {
-    const { handleSseStream, publishStageLog } = await import("./logStream.js");
+    const { handleSseStream } = await import("./logStream.js");
+    const { observabilityService } = await import("../services/observabilityService.js");
     const req = makeReq("run-sse-4");
     const res = makeRes();
 
@@ -150,14 +148,15 @@ describe("handleSseStream", () => {
     req._emit("close");
 
     // After close, publishing should not reach this client
-    publishStageLog("run-sse-4", "build", "should not arrive");
+    observabilityService.ingestBatch([{ type: "log", payload: { runId: "run-sse-4" }, chunk: "should not arrive" }]);
 
     const logEvents = res.written.filter((d) => d.includes("should not arrive"));
     expect(logEvents).toHaveLength(0);
   });
 
   it("does not mix events between different run IDs", async () => {
-    const { handleSseStream, publishStageLog } = await import("./logStream.js");
+    const { handleSseStream } = await import("./logStream.js");
+    const { observabilityService } = await import("../services/observabilityService.js");
 
     const req1 = makeReq("run-A");
     const res1 = makeRes();
@@ -169,7 +168,7 @@ describe("handleSseStream", () => {
     res1.write.mockClear();
     res2.write.mockClear();
 
-    publishStageLog("run-A", "build", "only-for-A");
+    observabilityService.ingestBatch([{ type: "log", payload: { runId: "run-A" }, chunk: "only-for-A" }]);
 
     expect(res1.written.some((d) => d.includes("only-for-A"))).toBe(true);
     expect(res2.written.some((d) => d.includes("only-for-A"))).toBe(false);
@@ -191,10 +190,9 @@ describe("WebSocket auth (isAuthorised in non-test mode)", () => {
     process.env.NODE_ENV = "production";
     try {
       const mod = await import("./logStream.js");
-      // Access the internal via re-export — we test it indirectly through WS upgrade rejection.
       // Since we can't easily spin up a WS server in a unit test, we validate the
-      // exported publishStageLog doesn't throw (no clients connected in prod).
-      expect(() => mod.publishStageLog("run-x", "stage", "chunk")).not.toThrow();
+      // module loads.
+      expect(mod).toBeDefined();
     } finally {
       process.env.NODE_ENV = saved;
     }

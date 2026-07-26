@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { requireInternalApiKey } from "../middleware/requireInternalApiKey.js";
-import { fetchPipelineYamlFromGithub, isGithubAppConfigured } from "../services/githubPipelineService.js";
+import {
+  fetchPipelineYamlFromGithub,
+  isGithubAppConfigured,
+} from "../services/githubPipelineService.js";
 import { runnerService } from "../services/runnerService.js";
 import { diagnosisService } from "../services/diagnosisService.js";
 import { container } from "../bootstrap/index.js";
 import { decryptSecret } from "../services/cryptoService.js";
+import { observabilityService } from "../services/observabilityService.js";
 
 export const runnerRouter = Router();
 
@@ -30,7 +34,10 @@ runnerRouter.get("/internal/secrets", async (_req, res, next) => {
   }
 });
 
-function readRunnerId(req: { header: (name: string) => string | undefined }, logger: { warn: (o: unknown, msg: string) => void }): string {
+function readRunnerId(
+  req: { header: (name: string) => string | undefined },
+  logger: { warn: (o: unknown, msg: string) => void },
+): string {
   const raw = req.header("x-runner-id");
   if (raw && raw.trim() !== "") return raw.trim();
   logger.warn({}, "missing x-runner-id header; using legacy runner id");
@@ -45,8 +52,25 @@ runnerRouter.post("/internal/runs/claim", async (req, res, next) => {
       res.status(204).send();
       return;
     }
-    req.log.info({ runId: String(run._id ?? run.id), runnerId, eventName: "run_claimed" }, "run claimed");
+    req.log.info(
+      { runId: String(run._id ?? run.id), runnerId, eventName: "run_claimed" },
+      "run claimed",
+    );
     res.status(200).json(run);
+  } catch (err) {
+    next(err);
+  }
+});
+
+runnerRouter.post("/internal/events", async (req, res, next) => {
+  try {
+    const body = req.body;
+    if (typeof body !== "object" || body === null || !Array.isArray(body.events)) {
+      res.status(400).json({ error: "invalid_events_payload" });
+      return;
+    }
+    observabilityService.ingestBatch(body.events);
+    res.status(204).send();
   } catch (err) {
     next(err);
   }
@@ -59,8 +83,14 @@ runnerRouter.post("/internal/runs/:id/status", async (req, res, next) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const bodyStatus = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).status : "unknown";
-    req.log.info({ runId: req.params.id, status: bodyStatus, eventName: "run_status_changed" }, "run status changed");
+    const bodyStatus =
+      typeof req.body === "object" && req.body !== null
+        ? (req.body as Record<string, unknown>).status
+        : "unknown";
+    req.log.info(
+      { runId: req.params.id, status: bodyStatus, eventName: "run_status_changed" },
+      "run status changed",
+    );
     res.status(200).json(updated);
   } catch (err) {
     next(err);
@@ -100,8 +130,19 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const bodyStatus = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>).status : "unknown";
-    req.log.info({ runId: req.params.id, stageName: req.params.stageName, status: bodyStatus, eventName: "stage_status_changed" }, "stage status changed");
+    const bodyStatus =
+      typeof req.body === "object" && req.body !== null
+        ? (req.body as Record<string, unknown>).status
+        : "unknown";
+    req.log.info(
+      {
+        runId: req.params.id,
+        stageName: req.params.stageName,
+        status: bodyStatus,
+        eventName: "stage_status_changed",
+      },
+      "stage status changed",
+    );
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -110,7 +151,11 @@ runnerRouter.post("/internal/runs/:id/stages/:stageName/status", async (req, res
 
 runnerRouter.post("/internal/runs/:id/stages/:stageName/metrics", async (req, res, next) => {
   try {
-    const ok = await runnerService.updateStageMetrics(req.params.id, req.params.stageName, req.body);
+    const ok = await runnerService.updateStageMetrics(
+      req.params.id,
+      req.params.stageName,
+      req.body,
+    );
     if (!ok) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -160,7 +205,12 @@ runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
 
     const cached = await container.persistence.pipelineRepository.findById(pipelineId);
     if (cached !== null && cached.refSha === ref) {
-      res.status(200).json({ rawYaml: cached.rawYaml, updatedAt: cached.updatedAt, refSha: cached.refSha, source: "cache" });
+      res.status(200).json({
+        rawYaml: cached.rawYaml,
+        updatedAt: cached.updatedAt,
+        refSha: cached.refSha,
+        source: "cache",
+      });
       return;
     }
 
@@ -172,31 +222,35 @@ runnerRouter.get("/internal/pipelines/:pipelineId", async (req, res, next) => {
     const rawYaml = await fetchPipelineYamlFromGithub({ pipelineId, refSha: ref, logger: req.log });
     await container.persistence.pipelineRepository.upsertSummaryStats(pipelineId, ref, rawYaml);
 
-    res.status(200).json({ rawYaml, updatedAt: new Date().toISOString(), refSha: ref, source: "github" });
+    res
+      .status(200)
+      .json({ rawYaml, updatedAt: new Date().toISOString(), refSha: ref, source: "github" });
   } catch (err) {
     next(err);
   }
 });
 
-runnerRouter.post("/internal/runs/:id/stages/:stageName/artifacts/:fileName", async (req, res, next) => {
-  try {
-    const run = await container.persistence.runRepository.findById(req.params.id);
-    if (!run) {
-      res.status(404).json({ error: "not_found" });
-      return;
+runnerRouter.post(
+  "/internal/runs/:id/stages/:stageName/artifacts/:fileName",
+  async (req, res, next) => {
+    try {
+      const run = await container.persistence.runRepository.findById(req.params.id);
+      if (!run) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      await container.artifactStorage.uploadArtifact(
+        run.pipelineId,
+        req.params.id,
+        req.params.stageName,
+        req.params.fileName,
+        req,
+      );
+
+      res.status(204).send();
+    } catch (err) {
+      next(err);
     }
-    
-    await container.artifactStorage.uploadArtifact(
-      run.pipelineId,
-      req.params.id,
-      req.params.stageName,
-      req.params.fileName,
-      req
-    );
-    
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-});
-
+  },
+);

@@ -24,26 +24,7 @@ import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
 import type { Logger } from "pino";
 import jwt from "jsonwebtoken";
-
-// ---------------------------------------------------------------------------
-// Shared types
-// ---------------------------------------------------------------------------
-
-export type LogStreamEvent =
-  | { type: "hello"; runId: string; timestamp: string }
-  | { type: "log"; runId: string; stageName: string; chunk: string; timestamp: string }
-  | { type: "stage_status"; runId: string; stageName: string; status: string; timestamp: string }
-  | { type: "run_status"; runId: string; status: string; timestamp: string };
-
-// ---------------------------------------------------------------------------
-// Client registries
-// ---------------------------------------------------------------------------
-
-type WsClient = WebSocket;
-const wsClientsByRunId = new Map<string, Set<WsClient>>();
-
-// SSE: each client is an Express Response with the stream kept open.
-const sseClientsByRunId = new Map<string, Set<Response>>();
+import { observabilityService } from "../services/observabilityService.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,37 +78,7 @@ function parseRunIdFromPath(rawUrl: string): string | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Broadcast to all transports
-// ---------------------------------------------------------------------------
-
-function broadcastWs(runId: string, event: LogStreamEvent): void {
-  const clients = wsClientsByRunId.get(runId);
-  if (!clients || clients.size === 0) return;
-  const payload = safeJsonStringify(event);
-  for (const ws of clients) {
-    if (ws.readyState === ws.OPEN) ws.send(payload);
-  }
-}
-
-function broadcastSse(runId: string, event: LogStreamEvent): void {
-  const clients = sseClientsByRunId.get(runId);
-  if (!clients || clients.size === 0) return;
-  const data = safeJsonStringify(event);
-  const frame = `data: ${data}\n\n`;
-  for (const res of clients) {
-    try {
-      res.write(frame);
-    } catch {
-      // client disconnected; will be cleaned up by the close handler
-    }
-  }
-}
-
-function broadcast(runId: string, event: LogStreamEvent): void {
-  broadcastWs(runId, event);
-  broadcastSse(runId, event);
-}
+// Replaced custom broadcast with observabilityService
 
 // ---------------------------------------------------------------------------
 // WebSocket server
@@ -168,24 +119,22 @@ export function attachLogWebSocketServer(httpServer: Server, logger: Logger): vo
     });
   });
 
-  wss.on("connection", (ws: WsClient, _req: IncomingMessage, runId: string) => {
-    let set = wsClientsByRunId.get(runId);
-    if (!set) {
-      set = new Set<WsClient>();
-      wsClientsByRunId.set(runId, set);
-    }
-    set.add(ws);
+  wss.on("connection", (ws: WebSocket, _req: IncomingMessage, runId: string) => {
+    ws.send(
+      safeJsonStringify({ type: "hello", runId, timestamp: nowIso() }),
+    );
 
-    ws.send(safeJsonStringify({ type: "hello", runId, timestamp: nowIso() } satisfies LogStreamEvent));
-
-    ws.on("close", () => {
-      const current = wsClientsByRunId.get(runId);
-      if (!current) return;
-      current.delete(ws);
-      if (current.size === 0) wsClientsByRunId.delete(runId);
+    const unsubscribe = observabilityService.subscribeToRun(runId, (event: any) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(safeJsonStringify(event));
+      }
     });
 
-    ws.on("error", (err) => {
+    ws.on("close", () => {
+      unsubscribe();
+    });
+
+    ws.on("error", (err: Error) => {
       logger.debug({ err, runId }, "websocket client error");
     });
   });
@@ -206,7 +155,10 @@ export function attachLogWebSocketServer(httpServer: Server, logger: Logger): vo
  * Auth is handled by the Express `requireAuth` middleware that wraps /api/*.
  */
 export function handleSseStream(req: Request, res: Response): void {
-  const runId = typeof req.params.id === "string" ? req.params.id : (Array.isArray(req.params.id) ? req.params.id[0] : "") ?? "";
+  const runId =
+    typeof req.params.id === "string"
+      ? req.params.id
+      : ((Array.isArray(req.params.id) ? req.params.id[0] : "") ?? "");
   if (runId === "") {
     res.status(400).json({ error: "missing_run_id" });
     return;
@@ -219,12 +171,15 @@ export function handleSseStream(req: Request, res: Response): void {
   res.flushHeaders();
 
   // Register this response as a streaming client.
-  let set = sseClientsByRunId.get(runId);
-  if (!set) {
-    set = new Set<Response>();
-    sseClientsByRunId.set(runId, set);
-  }
-  set.add(res);
+  const unsubscribe = observabilityService.subscribeToRun(runId, (event: any) => {
+    const data = safeJsonStringify(event);
+    const frame = `data: ${data}\n\n`;
+    try {
+      res.write(frame);
+    } catch {
+      // ignore
+    }
+  });
 
   // Send initial "hello" event.
   res.write(`data: ${safeJsonStringify({ type: "hello", runId, timestamp: nowIso() })}\n\n`);
@@ -240,28 +195,8 @@ export function handleSseStream(req: Request, res: Response): void {
 
   req.on("close", () => {
     clearInterval(keepAlive);
-    const current = sseClientsByRunId.get(runId);
-    if (!current) return;
-    current.delete(res);
-    if (current.size === 0) sseClientsByRunId.delete(runId);
+    unsubscribe();
   });
 }
 
-// ---------------------------------------------------------------------------
-// Publisher functions (called from runnerService)
-// ---------------------------------------------------------------------------
-
-export function publishStageLog(runId: string, stageName: string, chunk: string): void {
-  if (!runId || !stageName || !chunk) return;
-  broadcast(runId, { type: "log", runId, stageName, chunk, timestamp: nowIso() });
-}
-
-export function publishStageStatus(runId: string, stageName: string, status: string): void {
-  if (!runId || !stageName || !status) return;
-  broadcast(runId, { type: "stage_status", runId, stageName, status, timestamp: nowIso() });
-}
-
-export function publishRunStatus(runId: string, status: string): void {
-  if (!runId || !status) return;
-  broadcast(runId, { type: "run_status", runId, status, timestamp: nowIso() });
-}
+// Replaced publisher functions with direct ObservabilityService ingestion in runnerService
