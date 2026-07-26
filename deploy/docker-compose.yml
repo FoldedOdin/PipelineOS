@@ -48,6 +48,8 @@ services:
       - api
     environment:
       - SSH_AUTH_SOCK=/run/user/1000/ssh-agent.socket
+    security_opt:
+      - label:disable
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/pipelineos-workspaces:/tmp/pipelineos-workspaces:z
