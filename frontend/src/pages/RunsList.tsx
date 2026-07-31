@@ -54,7 +54,7 @@ function parseRunsList(payload: unknown): { items: RunRow[]; total: number } | n
   for (const item of itemsRaw) {
     if (typeof item !== "object" || item === null) continue;
     const r = item as Record<string, unknown>;
-    const id = asString(r._id);
+    const id = asString(r.id || r._id);
     const status = asRunStatus(r.status);
     const pipelineId = asString(r.pipelineId);
     const branch = asString(r.branch);

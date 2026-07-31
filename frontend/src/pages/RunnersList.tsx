@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { apiGetJson } from "../api/client";
 
 interface RunnerRegistration {
-  _id: string;
+  id?: string;
+  _id?: string;
   runnerId: string;
   lastHeartbeatAt: string;
   status: "online" | "offline";
@@ -85,7 +86,7 @@ export default function RunnersList(): ReactElement {
                 const displayStatus = r.isStale ? "offline" : r.status;
 
                 return (
-                  <tr key={r._id} className="hover:bg-slate-800/30 transition-colors">
+                  <tr key={r.id || r._id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-slate-200">{r.runnerId}</td>
                     <td className="px-4 py-3">
                       {displayStatus === "online" ? (

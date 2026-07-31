@@ -122,36 +122,49 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 // ---------------------------------------------------------------------------
 
 export async function claimNextRun(logger: Logger): Promise<ClaimedRun | null> {
-  const res = await apiFetch("/internal/runs/claim", { method: "POST" });
-  if (res.status === 204) return null;
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text() }, "claim failed");
+  try {
+    const res = await apiFetch("/internal/runs/claim", { method: "POST" });
+    if (res.status === 204) return null;
+    if (!res.ok) {
+      logger.warn({ status: res.status, body: await res.text() }, "claim failed");
+      return null;
+    }
+    const data: unknown = await res.json();
+    const raw = data as Record<string, unknown>;
+    const id = typeof raw._id === "string" ? raw._id : undefined;
+    if (!id) return null;
+
+    const pipelineId = typeof raw.pipelineId === "string" ? raw.pipelineId : null;
+    const commitSha = typeof raw.commitSha === "string" ? raw.commitSha : null;
+    return { ...raw, _id: id, pipelineId, commitSha };
+  } catch (err) {
+    logger.warn({ err }, "claimNextRun encountered network error");
     return null;
   }
-  const data: unknown = await res.json();
-  const raw = data as Record<string, unknown>;
-  const id = typeof raw._id === "string" ? raw._id : undefined;
-  if (!id) return null;
-
-  const pipelineId = typeof raw.pipelineId === "string" ? raw.pipelineId : null;
-  const commitSha = typeof raw.commitSha === "string" ? raw.commitSha : null;
-  return { ...raw, _id: id, pipelineId, commitSha };
 }
 
 export async function heartbeatRun(runId: string): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/heartbeat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({}),
-  });
+  try {
+    await apiFetch(`/internal/runs/${runId}/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    // Ignore transient heartbeat failures
+  }
 }
 
 export async function setRunStatus(runId: string, status: string): Promise<void> {
-  await apiFetch(`/internal/runs/${runId}/status`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status }),
-  });
+  try {
+    await apiFetch(`/internal/runs/${runId}/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+  } catch {
+    // Ignore transient status error
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,13 +176,17 @@ export async function postEventsBatch(
   logger: Logger,
 ): Promise<void> {
   if (events.length === 0) return;
-  const res = await apiFetch(`/internal/events`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ events }),
-  });
-  if (!res.ok) {
-    logger.warn({ status: res.status, body: await res.text() }, "failed to post events batch");
+  try {
+    const res = await apiFetch(`/internal/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ events }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status, body: await res.text() }, "failed to post events batch");
+    }
+  } catch (err) {
+    logger.warn({ err }, "failed to post events batch due to network error");
   }
 }
 

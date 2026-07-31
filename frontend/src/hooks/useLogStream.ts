@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiGetJson } from "../api/client";
 
 export interface LogLine {
   stageName: string;
@@ -110,15 +111,61 @@ export function useLogStream(runId: string | undefined): {
     partialByStageRef.current = {};
     setState({ status: "connecting" });
 
-    const baseWs = import.meta.env.VITE_WS_URL;
+    let cancelled = false;
+    const fetchHistory = async () => {
+      try {
+        const runData = (await apiGetJson(`/api/runs/${runId}`)) as {
+          stages?: Array<{ name?: string; finishedAt?: string; startedAt?: string }>;
+        };
+        if (cancelled || !runData || !Array.isArray(runData.stages)) return;
+        const initialLogLines: LogLine[] = [];
+        for (const stage of runData.stages) {
+          if (!stage.name) continue;
+          try {
+            const logData = (await apiGetJson(`/api/runs/${runId}/stages/${stage.name}/logs`)) as {
+              logs?: string;
+            };
+            if (logData && typeof logData.logs === "string" && logData.logs.trim() !== "") {
+              const rawLines = logData.logs.replaceAll("\r\n", "\n").split("\n");
+              for (const line of rawLines) {
+                if (line) {
+                  initialLogLines.push({
+                    stageName: stage.name,
+                    line,
+                    timestamp: stage.finishedAt || stage.startedAt || new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          } catch {
+            // ignore missing stage log
+          }
+        }
+        if (!cancelled && initialLogLines.length > 0) {
+          linesRef.current = [...initialLogLines, ...linesRef.current].slice(-maxLines);
+          setState((prev) =>
+            prev.status === "open" || prev.status === "connecting"
+              ? { status: "open", lines: linesRef.current }
+              : prev,
+          );
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchHistory().catch(() => undefined);
+
+    let baseWs = import.meta.env.VITE_WS_URL;
+    if (!baseWs || baseWs.includes("localhost")) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      baseWs = `${protocol}//${window.location.host}`;
+    }
     const url = `${baseWs.replace(/\/$/, "")}/ws/runs/${runId}`;
     const ws = new WebSocket(url);
     socketRef.current = ws;
 
     ws.onopen = () => {
-      linesRef.current = [];
-      partialByStageRef.current = {};
-      setState({ status: "open", lines: [] });
+      setState({ status: "open", lines: linesRef.current });
     };
 
     ws.onmessage = (event) => {

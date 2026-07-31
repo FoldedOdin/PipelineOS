@@ -282,10 +282,6 @@ export const runnerService = {
     const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return false;
 
-    const stages = [...run.stages];
-    const index = stages.findIndex((s) => s.name === stageName);
-    if (index < 0) return false;
-
     const chunk = logs;
 
     try {
@@ -295,10 +291,12 @@ export const runnerService = {
       return false;
     }
 
-    observabilityService.ingestBatch([{
-      type: "LogChunkReceived",
-      payload: { type: "log", runId, stageName, chunk, timestamp: new Date().toISOString() },
-    }]);
+    observabilityService.ingestBatch([
+      {
+        type: "LogChunkReceived",
+        payload: { type: "log", runId, stageName, chunk, timestamp: new Date().toISOString() },
+      },
+    ]);
     return true;
   },
 

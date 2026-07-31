@@ -11,6 +11,8 @@
  *
  * All Docker and HTTP details live in container-runner.ts and api-client.ts.
  */
+import fs from "node:fs";
+import path from "node:path";
 import type { Logger } from "pino";
 import {
   claimNextRun,
@@ -111,11 +113,17 @@ export async function executeQueuedRun(logger: Logger): Promise<void> {
     let pipeline: PipelineDefinition = demoPipeline();
     if (pipelineId && commitSha) {
       workspacePath = await prepareWorkspace(runId, pipelineId, commitSha, runLogger);
-      const yaml = await fetchPipelineYaml(pipelineId, commitSha, runLogger);
+      let yaml = await fetchPipelineYaml(pipelineId, commitSha, runLogger);
+      if (!yaml) {
+        try {
+          yaml = await fs.promises.readFile(path.join(workspacePath, ".pipelineos.yml"), "utf8");
+          runLogger.info({ pipelineId, commitSha }, "using local .pipelineos.yml from workspace");
+        } catch (err) {
+          runLogger.warn({ pipelineId, commitSha, err }, "no pipeline yaml found; using demo pipeline");
+        }
+      }
       if (yaml) {
         pipeline = parsePipelineYaml(yaml);
-      } else {
-        runLogger.warn({ pipelineId, commitSha }, "no pipeline yaml found; using demo pipeline");
       }
     }
 

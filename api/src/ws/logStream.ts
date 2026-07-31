@@ -126,7 +126,9 @@ export function attachLogWebSocketServer(httpServer: Server, logger: Logger): vo
 
     const unsubscribe = observabilityService.subscribeToRun(runId, (event: any) => {
       if (ws.readyState === ws.OPEN) {
-        ws.send(safeJsonStringify(event));
+        const payloadToSend =
+          event?.payload && typeof event.payload.type === "string" ? event.payload : event;
+        ws.send(safeJsonStringify(payloadToSend));
       }
     });
 
@@ -172,7 +174,9 @@ export function handleSseStream(req: Request, res: Response): void {
 
   // Register this response as a streaming client.
   const unsubscribe = observabilityService.subscribeToRun(runId, (event: any) => {
-    const data = safeJsonStringify(event);
+    const payloadToSend =
+      event?.payload && typeof event.payload.type === "string" ? event.payload : event;
+    const data = safeJsonStringify(payloadToSend);
     const frame = `data: ${data}\n\n`;
     try {
       res.write(frame);

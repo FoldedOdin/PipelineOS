@@ -219,14 +219,13 @@ export async function runStage(
     }
 
     const wallSeconds = Math.max(0, (Date.now() - wallStart) / 1000);
-    const cpuPrice = optionalEnvNumber("COST_CPU_USD_PER_CPU_SECOND") ?? 0;
-    const memPrice = optionalEnvNumber("COST_MEM_USD_PER_GB_SECOND") ?? 0;
-    const memGbSeconds =
-      result.memBytesAvg !== null ? (result.memBytesAvg / 1e9) * wallSeconds : null;
-    const costUsdEstimated =
-      result.cpuSeconds !== null && memGbSeconds !== null
-        ? result.cpuSeconds * cpuPrice + memGbSeconds * memPrice
-        : null;
+    const cpuPrice = optionalEnvNumber("COST_CPU_USD_PER_CPU_SECOND") ?? 0.000033;
+    const memPrice = optionalEnvNumber("COST_MEM_USD_PER_GB_SECOND") ?? 0.000004;
+    const cpuSecs =
+      result.cpuSeconds ?? wallSeconds * Math.max(0.2, (result.cpuPercentAvg ?? 50) / 100);
+    const memBytes = result.memBytesAvg ?? result.memBytesMax ?? 1024 * 1024 * 1024;
+    const memGbSeconds = (memBytes / 1e9) * wallSeconds;
+    const costUsdEstimated = cpuSecs * cpuPrice + memGbSeconds * memPrice;
 
     void postStageMetrics(runId, stageName, {
       cpuSeconds: result.cpuSeconds,

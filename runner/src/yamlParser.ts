@@ -11,7 +11,8 @@ function requiredString(value: unknown, field: string): string {
   return value;
 }
 
-function readStringArray(value: unknown, field: string): string[] {
+function readStringArray(value: unknown, field: string, defaultValue?: string[]): string[] {
+  if (value === undefined && defaultValue !== undefined) return defaultValue;
   if (!Array.isArray(value)) throw new Error(`invalid ${field}: expected array`);
   const items: string[] = [];
   for (const item of value) {
@@ -64,8 +65,8 @@ export function parsePipelineYaml(raw: string): PipelineDefinition {
   }
 
   const root = doc as Record<string, unknown>;
-  const name = requiredString(root.name, "name");
-  const onValues = readStringArray(root.on, "on");
+  const name = typeof root.name === "string" && root.name.trim() !== "" ? root.name : "Pipeline";
+  const onValues = readStringArray(root.on, "on", ["push", "pull_request"]);
   const on: PipelineTrigger[] = onValues.map((v) => {
     if (!isTrigger(v)) throw new Error(`invalid on: unsupported trigger "${v}"`);
     return v;

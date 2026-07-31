@@ -71,9 +71,18 @@ export const runService = {
   async getStageLogs(runId: string, stageName: string): Promise<string | null> {
     const run = await container.persistence.runRepository.findById(runId);
     if (run === null) return null;
-    const stages = Array.isArray(run.stages) ? run.stages : [];
-    const stage = stages.find((s) => typeof s === "object" && s !== null && s.name === stageName);
-    if (stage === undefined) return null;
-    return typeof stage.logs === "string" ? stage.logs : "";
+    try {
+      const stream = await container.logStorage.getLogsStream(run.pipelineId, runId, stageName);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString("utf-8");
+    } catch {
+      const stages = Array.isArray(run.stages) ? run.stages : [];
+      const stage = stages.find((s) => typeof s === "object" && s !== null && s.name === stageName);
+      if (stage === undefined) return null;
+      return typeof stage.logs === "string" ? stage.logs : "";
+    }
   },
 } as const;

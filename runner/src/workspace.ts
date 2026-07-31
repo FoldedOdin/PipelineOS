@@ -22,33 +22,32 @@ export async function prepareWorkspace(
   }
 
   logger.debug({ runId, workspacePath }, "Creating workspace directory");
+  await rm(workspacePath, { recursive: true, force: true });
   await mkdir(workspacePath, { recursive: true });
 
-  const repoUrl = `https://github.com/${repository}.git`;
+  const repoUrl = `git@github.com:${repository}.git`;
 
   try {
     logger.info({ runId, repoUrl }, "Cloning repository");
-    // Secure fetch: shallow clone for a specific commit.
-    // We init an empty repo, fetch the specific sha, and checkout.
     const env = {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
-      GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no"
+      GIT_SSH_COMMAND: "ssh -4 -o StrictHostKeyChecking=no",
     };
-
-    // Automatically rewrite HTTPS URLs to SSH for github.com inside the container
-    try {
-      await execFileAsync("git", ["config", "--global", "url.git@github.com:.insteadOf", "https://github.com/"], { env });
-    } catch {
-      // ignore config errors
-    }
 
     await execFileAsync("git", ["init"], { cwd: workspacePath, env });
     await execFileAsync("git", ["remote", "add", "origin", repoUrl], { cwd: workspacePath, env });
-    await execFileAsync("git", ["fetch", "--depth", "1", "origin", commitSha], {
-      cwd: workspacePath,
-      env,
-    });
+    try {
+      await execFileAsync("git", ["fetch", "--depth", "1", "origin", commitSha], {
+        cwd: workspacePath,
+        env,
+      });
+    } catch {
+      await execFileAsync("git", ["fetch", "origin", commitSha], {
+        cwd: workspacePath,
+        env,
+      });
+    }
     await execFileAsync("git", ["checkout", "FETCH_HEAD"], { cwd: workspacePath, env });
 
     logger.info({ runId, commitSha }, "Repository cloned successfully");

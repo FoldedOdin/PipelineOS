@@ -67,7 +67,7 @@ export function getRetainWorkspaceOnFailure(): boolean {
  */
 export function getContainerMemoryLimitBytes(): number | null {
   const raw = optionalEnv("CONTAINER_MEMORY_LIMIT");
-  if (!raw) return 512 * 1024 * 1024; // 512 MB default
+  if (!raw) return 2048 * 1024 * 1024; // 2 GB default
 
   const lower = raw.toLowerCase();
   if (lower.endsWith("g")) {
